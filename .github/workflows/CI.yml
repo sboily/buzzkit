@@ -29,6 +29,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Rust tests
+        run: cargo test
+
       - name: Install (editable) with dev deps
         run: pip install -e '.[dev]'
 

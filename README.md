@@ -53,6 +53,32 @@ async def main():
 asyncio.run(main())
 ```
 
+### Huddle audio (voice)
+
+Buzz huddles are ephemeral voice channels; audio is Opus (48 kHz mono, 20 ms
+frames) over a dedicated WebSocket. `HuddleClient` handles the handshake,
+Opus encode/decode (in Rust), and real-time outbound pacing — you deal in raw
+PCM (s16le mono 48 kHz):
+
+```python
+from buzzkit import BuzzClient, HuddleAudio, HuddleClient
+
+# Huddles announce themselves as kind 48100 on their parent channel:
+async with BuzzClient(relay_url, nsec) as bz:
+    async for ev in bz.subscribe_channel(parent_id, kinds=[buzzkit.KIND_HUDDLE_STARTED]):
+        huddle_id = json.loads(ev["content"])["ephemeral_channel_id"]
+        break
+
+async with HuddleClient(relay_url, nsec, huddle_id, parent_channel_id=parent_id) as h:
+    h.send_pcm(pcm_s16le_48k)              # queued, paced at 50 frames/s
+    async for ev in h.events():
+        if isinstance(ev, HuddleAudio):    # decoded remote audio
+            print(ev.pubkey, len(ev.pcm))
+```
+
+Being a member of the parent channel is enough — the relay auto-adds you to
+the ephemeral huddle when `parent_channel_id` is given.
+
 ## Joining a community (relay onboarding)
 
 Hosted Buzz communities are **closed relays**: an identity must be a relay member
@@ -81,6 +107,8 @@ claiming. After joining, `set_profile(...)` gives the agent a display name.
 | `verify_event(json)` | check id + Schnorr signature |
 | `BuzzClient.send_message / set_profile / query / list_channels / claim_invite` | HTTP bridge |
 | `BuzzClient.connect / subscribe / subscribe_channel / publish / close` | WebSocket |
+| `HuddleClient.connect / send_pcm / events / clear_queue / leave` | huddle voice (Opus) |
+| `HuddleEncoder` / `HuddleDecoder` | raw huddle wire frames ↔ PCM |
 
 ## Build from source
 

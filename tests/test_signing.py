@@ -95,3 +95,32 @@ def test_presence_event():
     event = json.loads(buzzkit.build_presence_event(nsec, "online"))
     assert event["kind"] == buzzkit.KIND_PRESENCE_UPDATE == 20001
     assert event["content"] == "online" or ["status", "online"] in event["tags"]
+
+
+def test_create_channel_event():
+    nsec, _, _ = buzzkit.generate_keypair()
+    channel_id = str(uuid.uuid4())
+    event = json.loads(
+        buzzkit.build_create_channel_event(
+            nsec, channel_id, "huddle-test", visibility="private", channel_type="stream", ttl=3600
+        )
+    )
+    assert event["kind"] == buzzkit.KIND_CREATE_CHANNEL == 9007
+    tags = {t[0]: t[1] for t in event["tags"]}
+    assert tags["h"] == channel_id
+    assert tags["name"] == "huddle-test"
+    assert tags["visibility"] == "private"
+    assert tags["channel_type"] == "stream"
+    assert tags["ttl"] == "3600"
+    with pytest.raises(ValueError):
+        buzzkit.build_create_channel_event(nsec, channel_id, "x", visibility="bogus")
+
+
+def test_huddle_started_event():
+    nsec, _, _ = buzzkit.generate_keypair()
+    parent, ephemeral = str(uuid.uuid4()), str(uuid.uuid4())
+    event = json.loads(buzzkit.build_huddle_started_event(nsec, parent, ephemeral))
+    assert event["kind"] == buzzkit.KIND_HUDDLE_STARTED == 48100
+    assert ["h", parent] in event["tags"]
+    assert json.loads(event["content"])["ephemeral_channel_id"] == ephemeral
+    assert buzzkit.verify_event(json.dumps(event))

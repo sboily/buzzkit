@@ -1,6 +1,6 @@
 [package]
 name = "buzzkit"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2021"
 publish = false
 description = "PyO3 bindings over Block's Buzz zero-I/O crates (buzz-core / buzz-sdk)"
@@ -12,7 +12,9 @@ name = "_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.24", features = ["extension-module", "abi3-py312"] }
+# extension-module is enabled by maturin via pyproject.toml, not here, so
+# plain `cargo build` / `cargo test` can link against libpython.
+pyo3 = { version = "0.24", features = ["abi3-py312"] }
 # Must match the `nostr` version buzz-core/buzz-sdk resolve to so the
 # Event/Keys/EventBuilder types unify across crate boundaries.
 nostr = { version = "0.44", features = ["nip44", "nip98"] }
@@ -23,3 +25,4 @@ uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
 hex = "0.4"
 base64 = "0.22"
+opus = "0.3"

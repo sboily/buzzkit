@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -61,7 +62,7 @@ class BuzzClient:
         self._http = _to_http(relay_url)
         self._ws_url = _to_ws(relay_url)
         self._secret = secret
-        self._auth_tag = auth_tag  # reserved for NIP-OA owner attestation
+        self._auth_tag = auth_tag  # NIP-OA owner attestation (AUTH + profile)
         self.npub, self.pubkey_hex = _native.pubkey_from_secret(secret)
         self._ws: Any = None
         self._reader: asyncio.Task | None = None
@@ -96,15 +97,26 @@ class BuzzClient:
         return await self.post_event(ev)
 
     async def set_profile(
-        self, display_name: str, *, about: str | None = None, picture: str | None = None
+        self,
+        display_name: str,
+        *,
+        about: str | None = None,
+        picture: str | None = None,
+        auth_tag: str | None = None,
     ) -> dict:
-        """Publish this identity's profile (kind 0) so it shows a name in Buzz."""
+        """Publish this identity's profile (kind 0) so it shows a name in Buzz.
+
+        ``auth_tag`` defaults to the client's NIP-OA owner attestation, so a
+        client constructed with one automatically shows as "managed by
+        <owner>" in the Buzz desktop (which reads the tag from kind 0).
+        """
         ev = _native.build_profile_event(
             self._secret,
             display_name=display_name,
             name=display_name,
             about=about,
             picture=picture,
+            auth_tag=auth_tag if auth_tag is not None else self._auth_tag,
         )
         return await self.post_event(ev)
 
@@ -118,6 +130,36 @@ class BuzzClient:
         """
         ev = _native.build_join_channel_event(self._secret, channel_id)
         return await self.publish(ev)
+
+    async def start_huddle(
+        self, parent_channel_id: str, *, name: str | None = None, ttl: int = 3600
+    ) -> str:
+        """Start a huddle in a channel; returns the ephemeral huddle channel id.
+
+        Creates a private ephemeral channel (kind 9007, over the WebSocket —
+        :meth:`connect` first) and posts the kind-48100 announcement to the
+        parent channel. Join the audio with
+        ``HuddleClient(..., huddle_id, parent_channel_id=parent_channel_id)``.
+        """
+        huddle_id = str(uuid.uuid4())
+        create_ev = _native.build_create_channel_event(
+            self._secret,
+            huddle_id,
+            name or f"huddle-{huddle_id[:8]}",
+            visibility="private",
+            channel_type="stream",
+            ttl=ttl,
+        )
+        result = await self.publish(create_ev)
+        if not result["accepted"]:
+            raise RuntimeError(f"huddle channel rejected: {result['message']}")
+        started_ev = _native.build_huddle_started_event(
+            self._secret, parent_channel_id, huddle_id
+        )
+        result = await self.publish(started_ev)
+        if not result["accepted"]:
+            raise RuntimeError(f"huddle announcement rejected: {result['message']}")
+        return huddle_id
 
     async def publish_presence(self, status: str = "online") -> dict:
         """Announce presence (kind 20001, ephemeral) over the WebSocket."""

@@ -35,6 +35,10 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
           manylinux: auto
+          # The `opus` crate builds vendored libopus with cmake when no system
+          # libopus is found; manylinux/cross containers don't all ship cmake.
+          before-script-linux: |
+            command -v cmake || yum install -y cmake || (apt-get update && apt-get install -y cmake)
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.os }}-${{ matrix.platform.target }}
