@@ -21,7 +21,9 @@ jobs:
         platform:
           - { os: ubuntu-latest, target: x86_64 }
           - { os: ubuntu-latest, target: aarch64 }
-          - { os: macos-13, target: x86_64 }
+          # Intel wheel is cross-compiled from the ARM runner: GitHub retired
+          # the macos-13 (Intel) runners — the label queues forever.
+          - { os: macos-14, target: x86_64 }
           - { os: macos-14, target: aarch64 }
           - { os: windows-latest, target: x64 }
     steps:
