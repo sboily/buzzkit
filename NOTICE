@@ -1,0 +1,20 @@
+buzzkit
+Copyright (c) 2026 Sylvain Boily
+
+This product is licensed under the MIT License (see LICENSE).
+
+The distributed wheels statically link and redistribute portions of the
+following third-party components, which retain their own licenses:
+
+- Buzz — buzz-core, buzz-sdk (https://github.com/block/buzz)
+  Copyright Block, Inc. Licensed under the Apache License, Version 2.0
+  (see LICENSE-APACHE).
+- rust-nostr / nostr (https://github.com/rust-nostr/nostr) — MIT License.
+- PyO3 (https://github.com/PyO3/pyo3) — Apache-2.0 OR MIT.
+- Additional transitive Rust crates (secp256k1, serde, serde_json, uuid,
+  sha2, hex, base64, url, …) under their respective permissive licenses
+  (MIT / Apache-2.0 / BSD / CC0). Run `cargo about generate` or
+  `cargo bundle-licenses` for the complete manifest.
+
+buzzkit is an independent, unofficial project. It is not affiliated with,
+sponsored by, or endorsed by Block, Inc.

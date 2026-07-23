@@ -1,0 +1,8 @@
+/target
+/.venv
+*.so
+*.pyd
+__pycache__/
+*.egg-info/
+.python-version
+agent.secret

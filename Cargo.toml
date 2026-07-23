@@ -1,0 +1,25 @@
+[package]
+name = "buzzkit"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "PyO3 bindings over Block's Buzz zero-I/O crates (buzz-core / buzz-sdk)"
+license = "MIT"
+repository = "https://github.com/sboily/buzzkit"
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.24", features = ["extension-module", "abi3-py312"] }
+# Must match the `nostr` version buzz-core/buzz-sdk resolve to so the
+# Event/Keys/EventBuilder types unify across crate boundaries.
+nostr = { version = "0.44", features = ["nip44", "nip98"] }
+# Pinned to a specific Buzz commit; bump deliberately to track their kind churn.
+buzz-core = { git = "https://github.com/block/buzz", rev = "acfbb1bb6af54cb29cb152496ff43b8285dcb8cf", package = "buzz-core" }
+buzz-sdk = { git = "https://github.com/block/buzz", rev = "acfbb1bb6af54cb29cb152496ff43b8285dcb8cf", package = "buzz-sdk" }
+uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"

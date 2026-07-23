@@ -1,0 +1,59 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "buzzkit"
+version = "0.1.0"
+description = "Python bindings + async client for Block's Buzz (Nostr) protocol, backed by Rust buzz-core/buzz-sdk"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE", "LICENSE-APACHE", "NOTICE"]
+authors = [{ name = "Sylvain Boily", email = "sylvainboilydroid@gmail.com" }]
+keywords = ["buzz", "nostr", "block", "chat", "agents", "messaging"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "httpx>=0.27",
+    "websockets>=13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "maturin>=1.7,<2",
+]
+
+[project.urls]
+Homepage = "https://github.com/sboily/buzzkit"
+Repository = "https://github.com/sboily/buzzkit"
+Issues = "https://github.com/sboily/buzzkit/issues"
+
+[tool.maturin]
+module-name = "buzzkit._native"
+python-source = "python"
+features = ["pyo3/extension-module"]
+
+[tool.ruff]
+line-length = 99
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
