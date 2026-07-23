@@ -24,8 +24,16 @@ def build_profile_event(
 def build_join_channel_event(secret: str, channel_id: str) -> str:
     """Build + sign a NIP-29 channel self-join event (kind 9000, role=bot)."""
 
-def build_auth_event(secret: str, challenge: str, relay_url: str) -> str:
+def build_presence_event(secret: str, status: str = ...) -> str:
+    """Build + sign a presence event (kind 20001); status online/away/offline."""
+
+def build_auth_event(
+    secret: str, challenge: str, relay_url: str, auth_tag: str | None = ...
+) -> str:
     """Build + sign a NIP-42 AUTH event (kind 22242); returns event JSON."""
+
+def compute_auth_tag(owner_secret: str, agent_pubkey_hex: str, conditions: str = ...) -> str:
+    """Compute a NIP-OA owner-attestation tag JSON attesting an agent pubkey."""
 
 def sign_nip98(secret: str, method: str, url: str, body: bytes | None = ...) -> str:
     """Return an ``Authorization: Nostr <base64>`` header value (NIP-98)."""

@@ -7,7 +7,7 @@
 
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use nostr::{EventBuilder, JsonUtil, Keys, Kind, RelayUrl, Tag, ToBech32};
+use nostr::{EventBuilder, JsonUtil, Keys, Kind, PublicKey, RelayUrl, Tag, ToBech32};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use sha2::{Digest, Sha256};
@@ -69,15 +69,48 @@ fn build_message_event(
 
 /// Build and sign a NIP-42 AUTH event (kind 22242) for a relay challenge.
 /// Returns the event JSON to send back as `["AUTH", <event>]`.
+///
+/// `auth_tag` is an optional NIP-OA owner-attestation tag JSON
+/// (`["auth", <owner>, <conditions>, <sig>]`) — inject it so the relay records
+/// the agent's owner.
 #[pyfunction]
-fn build_auth_event(secret: &str, challenge: &str, relay_url: &str) -> PyResult<String> {
+#[pyo3(signature = (secret, challenge, relay_url, auth_tag=None))]
+fn build_auth_event(
+    secret: &str,
+    challenge: &str,
+    relay_url: &str,
+    auth_tag: Option<&str>,
+) -> PyResult<String> {
     let keys = keys_from_secret(secret)?;
     let url = RelayUrl::parse(relay_url)
         .map_err(|e| PyValueError::new_err(format!("invalid relay url: {e}")))?;
-    let event = EventBuilder::auth(challenge, url)
+    let mut builder = EventBuilder::auth(challenge, url);
+    if let Some(tag_json) = auth_tag {
+        let tag = buzz_sdk::nip_oa::parse_auth_tag(tag_json)
+            .map_err(|e| PyValueError::new_err(format!("invalid auth_tag: {e}")))?;
+        builder = builder.tags([tag]);
+    }
+    let event = builder
         .sign_with_keys(&keys)
         .map_err(|e| PyValueError::new_err(format!("sign: {e}")))?;
     Ok(event.as_json())
+}
+
+/// Compute a NIP-OA owner-attestation tag: the OWNER signs an attestation over
+/// the agent's pubkey. Returns the `["auth", <owner>, <conditions>, <sig>]` tag
+/// JSON. `owner_secret` must differ from the agent (no self-attestation).
+#[pyfunction]
+#[pyo3(signature = (owner_secret, agent_pubkey_hex, conditions=""))]
+fn compute_auth_tag(
+    owner_secret: &str,
+    agent_pubkey_hex: &str,
+    conditions: &str,
+) -> PyResult<String> {
+    let owner_keys = keys_from_secret(owner_secret)?;
+    let agent_pubkey = PublicKey::from_hex(agent_pubkey_hex)
+        .map_err(|e| PyValueError::new_err(format!("invalid agent pubkey: {e}")))?;
+    buzz_sdk::nip_oa::compute_auth_tag(&owner_keys, &agent_pubkey, conditions)
+        .map_err(|e| PyValueError::new_err(format!("compute_auth_tag: {e}")))
 }
 
 /// Sign a NIP-98 HTTP-auth event (kind 27235). Returns the
@@ -160,16 +193,31 @@ fn build_join_channel_event(secret: &str, channel_id: &str) -> PyResult<String> 
     Ok(event.as_json())
 }
 
+/// Build and sign a presence event (kind 20001). `status` is "online",
+/// "away", or "offline". Ephemeral — publish over the WebSocket.
+#[pyfunction]
+#[pyo3(signature = (secret, status="online"))]
+fn build_presence_event(secret: &str, status: &str) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let event = buzz_sdk::build_presence_update(status)
+        .map_err(|e| PyValueError::new_err(format!("build_presence: {e}")))?
+        .sign_with_keys(&keys)
+        .map_err(|e| PyValueError::new_err(format!("sign: {e}")))?;
+    Ok(event.as_json())
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_keypair, m)?)?;
     m.add_function(wrap_pyfunction!(pubkey_from_secret, m)?)?;
     m.add_function(wrap_pyfunction!(build_message_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_auth_event, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_auth_tag, m)?)?;
     m.add_function(wrap_pyfunction!(sign_nip98, m)?)?;
     m.add_function(wrap_pyfunction!(verify_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_profile_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_join_channel_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_presence_event, m)?)?;
 
     // Buzz event kinds (subset — mirrors buzz-core/src/kind.rs).
     m.add("KIND_REACTION", 7u16)?;

@@ -73,3 +73,25 @@ def test_join_channel_event_keeps_self_p_tag():
     assert ["p", pk_hex] in event["tags"]
     assert ["role", "bot"] in event["tags"]
     assert any(t[0] == "h" for t in event["tags"])
+
+
+def test_compute_auth_tag():
+    owner_nsec, _, owner_pk = buzzkit.generate_keypair()
+    _, _, agent_pk = buzzkit.generate_keypair()
+    tag = json.loads(buzzkit.compute_auth_tag(owner_nsec, agent_pk))
+    assert tag[0] == "auth"
+    assert tag[1] == owner_pk  # owner pubkey
+    assert len(tag) == 4  # ["auth", owner, conditions, sig]
+
+
+def test_compute_auth_tag_rejects_self():
+    nsec, _, pk_hex = buzzkit.generate_keypair()
+    with pytest.raises(ValueError):
+        buzzkit.compute_auth_tag(nsec, pk_hex)  # owner == agent
+
+
+def test_presence_event():
+    nsec, _, _ = buzzkit.generate_keypair()
+    event = json.loads(buzzkit.build_presence_event(nsec, "online"))
+    assert event["kind"] == buzzkit.KIND_PRESENCE_UPDATE == 20001
+    assert event["content"] == "online" or ["status", "online"] in event["tags"]

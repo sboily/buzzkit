@@ -20,7 +20,9 @@ from ._native import (
     build_auth_event,
     build_join_channel_event,
     build_message_event,
+    build_presence_event,
     build_profile_event,
+    compute_auth_tag,
     generate_keypair,
     pubkey_from_secret,
     sign_nip98,
@@ -28,7 +30,7 @@ from ._native import (
 )
 from .client import BuzzClient
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "KIND_ADD_MEMBER",
@@ -42,7 +44,9 @@ __all__ = [
     "build_auth_event",
     "build_join_channel_event",
     "build_message_event",
+    "build_presence_event",
     "build_profile_event",
+    "compute_auth_tag",
     "generate_keypair",
     "pubkey_from_secret",
     "sign_nip98",

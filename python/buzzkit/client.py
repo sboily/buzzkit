@@ -119,6 +119,11 @@ class BuzzClient:
         ev = _native.build_join_channel_event(self._secret, channel_id)
         return await self.publish(ev)
 
+    async def publish_presence(self, status: str = "online") -> dict:
+        """Announce presence (kind 20001, ephemeral) over the WebSocket."""
+        ev = _native.build_presence_event(self._secret, status)
+        return await self.publish(ev)
+
     async def query(self, filters: list[dict]) -> list[dict]:
         """Run a NIP-01 REQ over the HTTP bridge; returns a list of events."""
         url = f"{self._http}/query"
@@ -225,7 +230,9 @@ class BuzzClient:
                 q.put_nowait(("closed", "connection lost"))
 
     async def _on_auth_challenge(self, challenge: str) -> None:
-        auth_ev = json.loads(_native.build_auth_event(self._secret, challenge, self._ws_url))
+        auth_ev = json.loads(
+            _native.build_auth_event(self._secret, challenge, self._ws_url, self._auth_tag)
+        )
         self._auth_event_id = auth_ev["id"]
         await self._ws.send(json.dumps(["AUTH", auth_ev]))
 
