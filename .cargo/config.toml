@@ -1,0 +1,6 @@
+# The `opus` crate (audiopus_sys) builds a vendored libopus whose CMakeLists
+# declares a pre-3.5 minimum; CMake 4 removed compatibility with those and
+# aborts configure. This env var is CMake's documented escape hatch and is a
+# no-op on older CMake. Applies to local builds, CI, and source installs alike.
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
