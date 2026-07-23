@@ -10,6 +10,7 @@ This is an independent, unofficial project — not affiliated with Block, Inc.
 from __future__ import annotations
 
 from ._native import (
+    KIND_ADD_MEMBER,
     KIND_AUTH,
     KIND_HTTP_AUTH,
     KIND_PRESENCE_UPDATE,
@@ -17,6 +18,7 @@ from ._native import (
     KIND_STREAM_MESSAGE,
     KIND_STREAM_MESSAGE_V2,
     build_auth_event,
+    build_join_channel_event,
     build_message_event,
     build_profile_event,
     generate_keypair,
@@ -26,9 +28,10 @@ from ._native import (
 )
 from .client import BuzzClient
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
+    "KIND_ADD_MEMBER",
     "KIND_AUTH",
     "KIND_HTTP_AUTH",
     "KIND_PRESENCE_UPDATE",
@@ -37,6 +40,7 @@ __all__ = [
     "KIND_STREAM_MESSAGE_V2",
     "BuzzClient",
     "build_auth_event",
+    "build_join_channel_event",
     "build_message_event",
     "build_profile_event",
     "generate_keypair",

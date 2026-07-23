@@ -1,6 +1,6 @@
 """Offline proof — no relay. keygen -> sign a Buzz message -> verify -> tamper check.
 
-    python examples/offline_sign.py
+python examples/offline_sign.py
 """
 
 from __future__ import annotations

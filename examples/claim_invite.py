@@ -1,6 +1,6 @@
 """Redeem a relay invite so the agent becomes a community member.
 
-    BUZZ_RELAY_URL=wss://... python examples/claim_invite.py <invite_url_or_code>
+BUZZ_RELAY_URL=wss://... python examples/claim_invite.py <invite_url_or_code>
 """
 
 from __future__ import annotations

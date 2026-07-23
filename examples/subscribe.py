@@ -1,6 +1,6 @@
 """Real-time inbound: subscribe to a channel over the WebSocket and print messages.
 
-    BUZZ_RELAY_URL=wss://... python examples/subscribe.py <channel-uuid>
+BUZZ_RELAY_URL=wss://... python examples/subscribe.py <channel-uuid>
 """
 
 from __future__ import annotations

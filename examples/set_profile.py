@@ -1,6 +1,6 @@
 """Publish the agent's profile (kind 0) so it shows a display name in Buzz.
 
-    BUZZ_RELAY_URL=wss://... python examples/set_profile.py ["Display Name"]
+BUZZ_RELAY_URL=wss://... python examples/set_profile.py ["Display Name"]
 """
 
 from __future__ import annotations

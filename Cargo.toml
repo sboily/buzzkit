@@ -1,6 +1,6 @@
 [package]
 name = "buzzkit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 publish = false
 description = "PyO3 bindings over Block's Buzz zero-I/O crates (buzz-core / buzz-sdk)"

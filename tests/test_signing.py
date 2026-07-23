@@ -59,8 +59,17 @@ def test_nip98_header_shape():
 
 def test_auth_event_is_kind_22242():
     nsec, _, _ = buzzkit.generate_keypair()
-    event = json.loads(
-        buzzkit.build_auth_event(nsec, "challenge-123", "wss://relay.example")
-    )
+    event = json.loads(buzzkit.build_auth_event(nsec, "challenge-123", "wss://relay.example"))
     assert event["kind"] == buzzkit.KIND_AUTH == 22242
     assert ["challenge", "challenge-123"] in event["tags"]
+
+
+def test_join_channel_event_keeps_self_p_tag():
+    nsec, _, pk_hex = buzzkit.generate_keypair()
+    event = json.loads(buzzkit.build_join_channel_event(nsec, str(uuid.uuid4())))
+    assert event["kind"] == buzzkit.KIND_ADD_MEMBER == 9000
+    # The `p` tag references the signer itself; it must survive nostr's self-tag
+    # stripping (allow_self_tagging) or the relay rejects the join as "missing p tag".
+    assert ["p", pk_hex] in event["tags"]
+    assert ["role", "bot"] in event["tags"]
+    assert any(t[0] == "h" for t in event["tags"])

@@ -140,6 +140,26 @@ fn build_profile_event(
     Ok(event.as_json())
 }
 
+/// Build and sign a NIP-29 channel self-join event (kind 9000, role=bot).
+/// The signer adds itself (`p` = own pubkey) to `channel_id`'s member list.
+#[pyfunction]
+fn build_join_channel_event(secret: &str, channel_id: &str) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let cid = Uuid::parse_str(channel_id)
+        .map_err(|e| PyValueError::new_err(format!("channel_id must be a UUID: {e}")))?;
+    let pubkey_hex = keys.public_key().to_hex();
+    // The `p` tag references the signer itself (self-join), so we must opt into
+    // self-tagging — nostr's EventBuilder strips author-matching `p` tags by
+    // default, which the relay would then reject as "missing p tag".
+    let builder = buzz_sdk::build_add_member(cid, &pubkey_hex, Some(buzz_sdk::MemberRole::Bot))
+        .map_err(|e| PyValueError::new_err(format!("build_add_member: {e}")))?
+        .allow_self_tagging();
+    let event = builder
+        .sign_with_keys(&keys)
+        .map_err(|e| PyValueError::new_err(format!("sign: {e}")))?;
+    Ok(event.as_json())
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_keypair, m)?)?;
@@ -149,6 +169,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sign_nip98, m)?)?;
     m.add_function(wrap_pyfunction!(verify_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_profile_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_join_channel_event, m)?)?;
 
     // Buzz event kinds (subset — mirrors buzz-core/src/kind.rs).
     m.add("KIND_REACTION", 7u16)?;
@@ -157,5 +178,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("KIND_AUTH", 22242u16)?;
     m.add("KIND_HTTP_AUTH", 27235u16)?;
     m.add("KIND_STREAM_MESSAGE_V2", 40002u16)?;
+    m.add("KIND_ADD_MEMBER", 9000u16)?;
     Ok(())
 }

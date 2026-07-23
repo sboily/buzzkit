@@ -1,6 +1,6 @@
 """Post a message to a channel via the HTTP bridge.
 
-    BUZZ_RELAY_URL=wss://... python examples/send_message.py <channel-uuid> ["message"]
+BUZZ_RELAY_URL=wss://... python examples/send_message.py <channel-uuid> ["message"]
 """
 
 from __future__ import annotations

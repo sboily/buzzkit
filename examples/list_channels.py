@@ -1,6 +1,6 @@
 """List channels (kind 39000 metadata) visible to the agent.
 
-    BUZZ_RELAY_URL=wss://... python examples/list_channels.py
+BUZZ_RELAY_URL=wss://... python examples/list_channels.py
 """
 
 from __future__ import annotations

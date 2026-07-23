@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "buzzkit"
-version = "0.1.0"
+version = "0.1.1"
 description = "Python bindings + async client for Block's Buzz (Nostr) protocol, backed by Rust buzz-core/buzz-sdk"
 readme = "README.md"
 requires-python = ">=3.12"

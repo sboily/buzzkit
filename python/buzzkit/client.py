@@ -108,6 +108,17 @@ class BuzzClient:
         )
         return await self.post_event(ev)
 
+    async def join_channel(self, channel_id: str) -> dict:
+        """Self-add as a bot member of a channel (NIP-29 kind 9000).
+
+        Published over the WebSocket — NIP-29 management events are not accepted
+        on the HTTP bridge — so :meth:`connect` must be called first. Required
+        for the identity's messages to reach other channel members and for it to
+        appear in mention autocomplete.
+        """
+        ev = _native.build_join_channel_event(self._secret, channel_id)
+        return await self.publish(ev)
+
     async def query(self, filters: list[dict]) -> list[dict]:
         """Run a NIP-01 REQ over the HTTP bridge; returns a list of events."""
         url = f"{self._http}/query"
