@@ -39,11 +39,18 @@ jobs:
           # chokes on them).
           manylinux: 2_28
           # Static libopus so the wheel is self-contained; cmake for the
-          # vendored build when the container doesn't ship it. The lib64 and
-          # cmake-4 policy quirks are handled by .cargo/config.toml.
+          # vendored build when the container doesn't ship it. On RPM-family
+          # containers (native x86_64 manylinux) GNUInstallDirs installs to
+          # lib64 where audiopus_sys never looks — pin libdir via a toolchain
+          # file there. Never set it for the cross containers (Ubuntu-family,
+          # libdir is already "lib"): cmake-rs skips its own cross config when
+          # a toolchain file is present, producing host-arch objects.
           before-script-linux: |
             export LIBOPUS_STATIC=1
             command -v cmake || yum install -y cmake || dnf install -y cmake || (apt-get update && apt-get install -y cmake)
+            if [ -f /etc/redhat-release ] || [ -f /etc/almalinux-release ]; then
+              export CMAKE_TOOLCHAIN_FILE="$(pwd)/build-support/vendored-libopus.cmake"
+            fi
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform.os }}-${{ matrix.platform.target }}

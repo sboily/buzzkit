@@ -3,9 +3,10 @@
 # aborts configure. This env var is CMake's documented escape hatch and is a
 # no-op on older CMake. Applies to local builds, CI, and source installs alike.
 #
-# The toolchain file pins CMAKE_INSTALL_LIBDIR=lib for that same vendored
-# build — see build-support/vendored-libopus.cmake. Both are no-ops when a
-# system libopus is found via pkg-config (no cmake build runs at all).
+# Deliberately NOT set here: CMAKE_TOOLCHAIN_FILE. cmake-rs skips its own
+# cross-compilation config whenever a toolchain file is present, which breaks
+# cross builds (aarch64 wheels compiled host-arch objects). The lib64 pin in
+# build-support/vendored-libopus.cmake is applied only where needed, by the
+# release workflow (native RPM-family manylinux containers).
 [env]
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
-CMAKE_TOOLCHAIN_FILE = { value = "build-support/vendored-libopus.cmake", relative = true }
