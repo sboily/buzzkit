@@ -2,5 +2,10 @@
 # declares a pre-3.5 minimum; CMake 4 removed compatibility with those and
 # aborts configure. This env var is CMake's documented escape hatch and is a
 # no-op on older CMake. Applies to local builds, CI, and source installs alike.
+#
+# The toolchain file pins CMAKE_INSTALL_LIBDIR=lib for that same vendored
+# build — see build-support/vendored-libopus.cmake. Both are no-ops when a
+# system libopus is found via pkg-config (no cmake build runs at all).
 [env]
 CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+CMAKE_TOOLCHAIN_FILE = { value = "build-support/vendored-libopus.cmake", relative = true }
