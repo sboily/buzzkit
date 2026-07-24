@@ -67,7 +67,9 @@ async def serve(handler):
 
 
 def make_client(url: str, **kw) -> HuddleClient:
+    """Silence streaming is off by default so frame-exact assertions hold."""
     nsec, _, _ = buzzkit.generate_keypair()
+    kw.setdefault("stream_silence", False)
     return HuddleClient(url, nsec, CHANNEL_ID, parent_channel_id=PARENT_ID, **kw)
 
 
@@ -160,7 +162,41 @@ class TestInbound:
 
 
 class TestOutbound:
-    async def test_send_pcm_is_paced_at_20ms_per_frame(self):
+    async def test_send_pcm_is_paced_never_bursts(self):
+        """A batch of queued audio is emitted one frame per ~20 ms, in order,
+        never dumped as a burst (which a receiver's jitter buffer mishandles)."""
+        arrivals: list[float] = []
+        received: list[bytes] = []
+        done = asyncio.Event()
+
+        async def handler(ws):
+            await relay_handshake(ws)
+            async for msg in ws:
+                if isinstance(msg, bytes):
+                    arrivals.append(time.monotonic())
+                    received.append(msg)
+                    if len(received) == 10:
+                        done.set()
+
+        async with serve(handler) as url:
+            client = make_client(url)
+            await client.connect()
+            client.send_pcm(sine_pcm(10))  # 10 frames queued at once
+            assert client.queued_frames == 10
+            async with asyncio.timeout(5):
+                await done.wait()
+            await client.close()
+
+        # 10 frames at 20 ms spacing ≈ 0.18 s of wall clock; a burst would
+        # arrive in a few ms. Allow slack but require real pacing.
+        span = arrivals[-1] - arrivals[0]
+        assert span >= 0.12, f"10 frames spanned {span:.3f}s — sent as a burst"
+        seqs = [int.from_bytes(f[0:2], "big") for f in received]
+        assert seqs == list(range(10))
+
+    async def test_unpaced_relays_immediately_in_order(self):
+        """paced=False: frames go to the wire as fast as queued, in order, with
+        no pacing sleep and no injected silence (an external pacer owns timing)."""
         received: list[bytes] = []
         done = asyncio.Event()
 
@@ -169,24 +205,23 @@ class TestOutbound:
             async for msg in ws:
                 if isinstance(msg, bytes):
                     received.append(msg)
-                    if len(received) == 5:
+                    if len(received) == 10:
                         done.set()
 
         async with serve(handler) as url:
-            client = make_client(url)
+            client = make_client(url, paced=False, stream_silence=True)
             await client.connect()
             start = time.monotonic()
-            client.send_pcm(sine_pcm(5))
-            assert client.queued_frames == 5
+            client.send_pcm(sine_pcm(10))
             async with asyncio.timeout(5):
                 await done.wait()
             elapsed = time.monotonic() - start
             await client.close()
 
-        # First frame goes out immediately, the other four at 20 ms spacing.
-        assert elapsed >= 0.06, f"5 frames arrived in {elapsed:.3f}s — not paced"
+        # Unpaced: 10 frames relayed near-instantly, not spread over ~0.2 s.
+        assert elapsed < 0.1, f"unpaced relay took {elapsed:.3f}s — still pacing?"
         seqs = [int.from_bytes(f[0:2], "big") for f in received]
-        assert seqs == [0, 1, 2, 3, 4]
+        assert seqs == list(range(10))
 
     async def test_clear_queue_drops_pending_audio(self):
         async def handler(ws):
@@ -220,6 +255,37 @@ class TestOutbound:
             client.flush_pcm()
             assert client.queued_frames == 1
             await client.close()
+
+    async def test_idle_stream_is_continuous_and_monotonic(self):
+        """Like a live mic: idle still sends frames, and speech queued after an
+        idle stretch continues the same seq/ts timeline on the wire."""
+        received: list[bytes] = []
+        enough = asyncio.Event()
+
+        async def handler(ws):
+            await relay_handshake(ws)
+            async for msg in ws:
+                if isinstance(msg, bytes):
+                    received.append(msg)
+                    if len(received) >= 12:
+                        enough.set()
+
+        async with serve(handler) as url:
+            client = make_client(url, stream_silence=True)
+            await client.connect()
+            await asyncio.sleep(0.12)  # idle: silence frames must flow
+            client.send_pcm(sine_pcm(3))  # then speech
+            async with asyncio.timeout(5):
+                await enough.wait()
+            await client.close()
+
+        assert len(received) >= 12
+        seqs = [int.from_bytes(f[0:2], "big") for f in received]
+        assert seqs == sorted(seqs) and len(set(seqs)) == len(seqs), (
+            f"wire seq must be strictly monotonic, got {seqs}"
+        )
+        levels = {f[6] for f in received}
+        assert len(levels) > 1, "expected both silence-floor and speech levels"
 
     async def test_leave_sends_leave_message(self):
         got_leave = asyncio.Event()

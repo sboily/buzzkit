@@ -225,8 +225,13 @@ impl HuddleEncoder {
     /// Feed s16le mono 48 kHz PCM bytes; returns zero or more complete v2
     /// wire frames, each ready to send as one WS binary message. Trailing
     /// samples short of a 20 ms frame are buffered for the next call.
+    ///
+    /// The GIL is released around the Opus encode (CPU-bound) so a caller on
+    /// a busy asyncio loop cannot starve the client's send thread — that
+    /// thread's pacing must stay real-time even while this runs.
     fn encode(&self, py: Python<'_>, pcm: &[u8]) -> PyResult<Vec<Py<PyBytes>>> {
-        let frames = self.lock().drain(pcm)?;
+        let owned = pcm.to_vec();
+        let frames = py.allow_threads(|| self.lock().drain(&owned))?;
         Ok(frames
             .into_iter()
             .map(|f| PyBytes::new(py, &f).into())
@@ -308,18 +313,25 @@ impl HuddleDecoder {
     /// Decode one inbound relay frame. Returns
     /// `(peer_index, seq, ts_48k, level_dbov, is_dtx, pcm)` where `pcm` is
     /// s16le mono 48 kHz bytes. Raises ValueError on a malformed frame.
+    ///
+    /// The GIL is released around the Opus decode (CPU-bound) so decoding a
+    /// busy inbound stream doesn't starve the send thread's real-time pacing.
     fn decode(
         &self,
         py: Python<'_>,
         frame: &[u8],
     ) -> PyResult<(u8, u16, u32, i8, bool, Py<PyBytes>)> {
-        let mut inner = self.lock();
-        let (peer_index, seq, ts_48k, level_dbov, flags, n) =
-            inner.decode(frame).map_err(PyValueError::new_err)?;
-        let pcm: Vec<u8> = inner.scratch[..n]
-            .iter()
-            .flat_map(|s| s.to_le_bytes())
-            .collect();
+        let owned = frame.to_vec();
+        let (peer_index, seq, ts_48k, level_dbov, flags, pcm) = py.allow_threads(|| {
+            let mut inner = self.lock();
+            let (peer_index, seq, ts_48k, level_dbov, flags, n) = inner.decode(&owned)?;
+            let pcm: Vec<u8> = inner.scratch[..n]
+                .iter()
+                .flat_map(|s| s.to_le_bytes())
+                .collect();
+            Ok::<_, String>((peer_index, seq, ts_48k, level_dbov, flags, pcm))
+        })
+        .map_err(PyValueError::new_err)?;
         Ok((
             peer_index,
             seq,
