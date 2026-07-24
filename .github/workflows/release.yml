@@ -87,3 +87,7 @@ jobs:
           merge-multiple: true
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # API token (PYPI_API_TOKEN secret). Falls back to trusted
+          # publishing (OIDC) if the secret is ever removed.
+          password: ${{ secrets.PYPI_API_TOKEN }}
