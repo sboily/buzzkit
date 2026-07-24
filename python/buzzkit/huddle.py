@@ -596,10 +596,9 @@ def _parse_peers(peers: object) -> dict[int, str]:
     out: dict[int, str] = {}
     if isinstance(peers, list):
         for p in peers:
-            if (
-                isinstance(p, dict)
-                and isinstance(p.get("peer_index"), int)
-                and isinstance(p.get("pubkey"), str)
-            ):
-                out[p["peer_index"]] = p["pubkey"]
+            if not isinstance(p, dict):
+                continue
+            index, pubkey = p.get("peer_index"), p.get("pubkey")
+            if isinstance(index, int) and isinstance(pubkey, str):
+                out[index] = pubkey
     return out

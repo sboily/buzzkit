@@ -42,7 +42,9 @@ from _shared import agent_secret, relay_url
 from buzzkit import KIND_HUDDLE_STARTED, BuzzClient, HuddleAudio, HuddleClient
 
 
-async def record(relay: str, secret: str, huddle_id: str, parent_id: str, out: pathlib.Path) -> None:
+async def record(
+    relay: str, secret: str, huddle_id: str, parent_id: str, out: pathlib.Path
+) -> None:
     out.mkdir(parents=True, exist_ok=True)
     frames_csv = (out / "recv_frames.csv").open("w")
     frames_csv.write("t_mono_ns,peer_index,seq,ts_48k,level_dbov,is_dtx,pcm_bytes\n")

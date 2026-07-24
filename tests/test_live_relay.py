@@ -60,12 +60,8 @@ async def test_huddle_audio_round_trip():
             huddle_id = await human_bz.start_huddle(parent_id, name="live-test")
 
             async with (
-                HuddleClient(
-                    RELAY, human_nsec, huddle_id, parent_channel_id=parent_id
-                ) as human,
-                HuddleClient(
-                    RELAY, agent_nsec, huddle_id, parent_channel_id=parent_id
-                ) as agent,
+                HuddleClient(RELAY, human_nsec, huddle_id, parent_channel_id=parent_id) as human,
+                HuddleClient(RELAY, agent_nsec, huddle_id, parent_channel_id=parent_id) as agent,
             ):
                 # The human's roster must include the agent (or gain it via a
                 # joined event) and vice versa.
@@ -104,9 +100,7 @@ async def test_huddle_audio_round_trip():
                 # Agent heard the human's stream, decoded to 48 kHz PCM.
                 assert len(echoed) >= 40
                 assert all(ev.pubkey == human_pk for ev in echoed if ev.pubkey)
-                assert all(
-                    len(ev.pcm) == buzzkit.HUDDLE_FRAME_SAMPLES * 2 for ev in echoed
-                )
+                assert all(len(ev.pcm) == buzzkit.HUDDLE_FRAME_SAMPLES * 2 for ev in echoed)
                 # Human heard the agent's echo back through the relay.
                 assert len(heard_back) >= 20
                 assert all(ev.pubkey == agent_pk for ev in heard_back if ev.pubkey)

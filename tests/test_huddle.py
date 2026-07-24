@@ -121,12 +121,8 @@ class TestInbound:
             await relay_handshake(ws)
             for frame in wire_frames:
                 await ws.send(frame)
-            await ws.send(
-                json.dumps({"type": "joined", "pubkey": new_peer, "peer_index": 2})
-            )
-            await ws.send(
-                json.dumps({"type": "left", "pubkey": new_peer, "peer_index": 2})
-            )
+            await ws.send(json.dumps({"type": "joined", "pubkey": new_peer, "peer_index": 2}))
+            await ws.send(json.dumps({"type": "left", "pubkey": new_peer, "peer_index": 2}))
 
         async with serve(handler) as url:
             client = make_client(url)
@@ -148,9 +144,7 @@ class TestInbound:
         async def handler(ws):
             auth = await relay_handshake(ws)
             await ws.send(
-                json.dumps(
-                    {"type": "joined", "pubkey": auth["event"]["pubkey"], "peer_index": 1}
-                )
+                json.dumps({"type": "joined", "pubkey": auth["event"]["pubkey"], "peer_index": 1})
             )
 
         async with serve(handler) as url:

@@ -153,9 +153,7 @@ class BuzzClient:
         result = await self.publish(create_ev)
         if not result["accepted"]:
             raise RuntimeError(f"huddle channel rejected: {result['message']}")
-        started_ev = _native.build_huddle_started_event(
-            self._secret, parent_channel_id, huddle_id
-        )
+        started_ev = _native.build_huddle_started_event(self._secret, parent_channel_id, huddle_id)
         result = await self.publish(started_ev)
         if not result["accepted"]:
             raise RuntimeError(f"huddle announcement rejected: {result['message']}")

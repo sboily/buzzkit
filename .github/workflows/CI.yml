@@ -38,5 +38,11 @@ jobs:
       - name: Ruff
         run: ruff check python tests examples
 
+      - name: Ruff format
+        run: ruff format --check python tests examples
+
+      - name: Type check (ty)
+        run: ty check python
+
       - name: Pytest
         run: pytest
