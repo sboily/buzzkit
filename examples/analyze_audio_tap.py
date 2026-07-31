@@ -44,7 +44,7 @@ def analyze_send_timing(rows: list[dict], t_key: str, label: str) -> None:
     if len(times) < 2:
         print(f"  {label}: not enough rows")
         return
-    deltas = [(b - a) / NS for a, b in zip(times, times[1:])]
+    deltas = [(b - a) / NS for a, b in zip(times, times[1:], strict=False)]
     span_s = (times[-1] - times[0]) / NS / 1000
     stalls = [(i, d) for i, d in enumerate(deltas) if d > 2 * FRAME_MS]
     bursts = sum(1 for d in deltas if d < 2.0)
@@ -73,9 +73,9 @@ def analyze_wire_csv(path: pathlib.Path) -> None:
     times = [int(r["t_mono_ns"]) for r in rows]
     zero = [r["all_zero"] == "1" for r in rows]
     t0 = times[0]
-    nonzero_times = [t for t, z in zip(times, zero) if not z]
+    nonzero_times = [t for t, z in zip(times, zero, strict=True) if not z]
     spliced = []
-    for t, z in zip(times, zero):
+    for t, z in zip(times, zero, strict=True):
         if not z or not nonzero_times:
             continue
         # nearest real-audio sends before/after this silence frame
@@ -112,7 +112,7 @@ def analyze_recv_csv(path: pathlib.Path) -> None:
         # reordered between the sender and us; dts != dseq*960 means the
         # sender's own media timeline jumped (encoder restart / bug).
         lost = jumps = 0
-        for a, b in zip(frames, frames[1:]):
+        for a, b in zip(frames, frames[1:], strict=False):
             dseq = (int(b["seq"]) - int(a["seq"])) % 65536
             dts = (int(b["ts_48k"]) - int(a["ts_48k"])) % (1 << 32)
             if dseq != 1:

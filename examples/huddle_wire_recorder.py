@@ -33,6 +33,7 @@ Analyze the capture with examples/analyze_audio_tap.py.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import pathlib
 import sys
@@ -117,7 +118,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(main())
-    except KeyboardInterrupt:
-        pass

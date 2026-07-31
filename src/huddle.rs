@@ -322,16 +322,17 @@ impl HuddleDecoder {
         frame: &[u8],
     ) -> PyResult<(u8, u16, u32, i8, bool, Py<PyBytes>)> {
         let owned = frame.to_vec();
-        let (peer_index, seq, ts_48k, level_dbov, flags, pcm) = py.allow_threads(|| {
-            let mut inner = self.lock();
-            let (peer_index, seq, ts_48k, level_dbov, flags, n) = inner.decode(&owned)?;
-            let pcm: Vec<u8> = inner.scratch[..n]
-                .iter()
-                .flat_map(|s| s.to_le_bytes())
-                .collect();
-            Ok::<_, String>((peer_index, seq, ts_48k, level_dbov, flags, pcm))
-        })
-        .map_err(PyValueError::new_err)?;
+        let (peer_index, seq, ts_48k, level_dbov, flags, pcm) = py
+            .allow_threads(|| {
+                let mut inner = self.lock();
+                let (peer_index, seq, ts_48k, level_dbov, flags, n) = inner.decode(&owned)?;
+                let pcm: Vec<u8> = inner.scratch[..n]
+                    .iter()
+                    .flat_map(|s| s.to_le_bytes())
+                    .collect();
+                Ok::<_, String>((peer_index, seq, ts_48k, level_dbov, flags, pcm))
+            })
+            .map_err(PyValueError::new_err)?;
         Ok((
             peer_index,
             seq,
