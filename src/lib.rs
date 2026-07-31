@@ -9,7 +9,7 @@ mod huddle;
 
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use nostr::{EventBuilder, JsonUtil, Keys, Kind, PublicKey, RelayUrl, Tag, ToBech32};
+use nostr::{EventBuilder, EventId, JsonUtil, Keys, Kind, PublicKey, RelayUrl, Tag, ToBech32};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use sha2::{Digest, Sha256};
@@ -17,6 +17,23 @@ use uuid::Uuid;
 
 fn keys_from_secret(secret: &str) -> PyResult<Keys> {
     Keys::parse(secret).map_err(|e| PyValueError::new_err(format!("invalid secret key: {e}")))
+}
+
+fn event_id(hex: &str, label: &str) -> PyResult<EventId> {
+    EventId::from_hex(hex)
+        .map_err(|e| PyValueError::new_err(format!("{label} must be an event id hex: {e}")))
+}
+
+fn channel_uuid(channel_id: &str) -> PyResult<Uuid> {
+    Uuid::parse_str(channel_id)
+        .map_err(|e| PyValueError::new_err(format!("channel_id must be a UUID: {e}")))
+}
+
+fn sign(builder: EventBuilder, keys: &Keys) -> PyResult<String> {
+    let event = builder
+        .sign_with_keys(keys)
+        .map_err(|e| PyValueError::new_err(format!("sign: {e}")))?;
+    Ok(event.as_json())
 }
 
 fn bech32<T: ToBech32>(v: &T) -> PyResult<String>
@@ -48,25 +65,119 @@ fn pubkey_from_secret(secret: &str) -> PyResult<(String, String)> {
 /// Build and sign a channel chat message (kind 9). Returns the NIP-01 event JSON.
 ///
 /// `channel_id` must be a UUID; `mentions` are pubkey hex strings (optional).
+/// `reply_to` makes the message a threaded reply to that event id; for a
+/// nested reply also pass `reply_root` (the thread's root event id).
 #[pyfunction]
-#[pyo3(signature = (secret, channel_id, content, mentions=None))]
+#[pyo3(signature = (secret, channel_id, content, mentions=None, reply_to=None, reply_root=None))]
 fn build_message_event(
     secret: &str,
     channel_id: &str,
     content: &str,
     mentions: Option<Vec<String>>,
+    reply_to: Option<&str>,
+    reply_root: Option<&str>,
 ) -> PyResult<String> {
     let keys = keys_from_secret(secret)?;
-    let cid = Uuid::parse_str(channel_id)
-        .map_err(|e| PyValueError::new_err(format!("channel_id must be a UUID: {e}")))?;
+    let cid = channel_uuid(channel_id)?;
     let mentions = mentions.unwrap_or_default();
     let mention_refs: Vec<&str> = mentions.iter().map(String::as_str).collect();
-    let builder = buzz_sdk::build_message(cid, content, None, &mention_refs, false, &[])
-        .map_err(|e| PyValueError::new_err(format!("build_message: {e}")))?;
-    let event = builder
-        .sign_with_keys(&keys)
-        .map_err(|e| PyValueError::new_err(format!("sign: {e}")))?;
-    Ok(event.as_json())
+    let thread_ref = match (reply_to, reply_root) {
+        (None, None) => None,
+        (None, Some(_)) => {
+            return Err(PyValueError::new_err("reply_root requires reply_to"));
+        }
+        (Some(parent), root) => Some(buzz_sdk::ThreadRef {
+            root_event_id: event_id(root.unwrap_or(parent), "reply_root")?,
+            parent_event_id: event_id(parent, "reply_to")?,
+        }),
+    };
+    let builder =
+        buzz_sdk::build_message(cid, content, thread_ref.as_ref(), &mention_refs, false, &[])
+            .map_err(|e| PyValueError::new_err(format!("build_message: {e}")))?;
+    sign(builder, &keys)
+}
+
+/// Build and sign a reaction (kind 7) to an event. `emoji` is the reaction
+/// content (e.g. "👍"). Returns the NIP-01 event JSON.
+#[pyfunction]
+fn build_reaction_event(secret: &str, target_event_id: &str, emoji: &str) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let target = event_id(target_event_id, "target_event_id")?;
+    let builder = buzz_sdk::build_reaction(target, emoji)
+        .map_err(|e| PyValueError::new_err(format!("build_reaction: {e}")))?;
+    sign(builder, &keys)
+}
+
+/// Build and sign a deletion (kind 5) of one of our own reaction events.
+#[pyfunction]
+fn build_remove_reaction_event(secret: &str, reaction_event_id: &str) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let target = event_id(reaction_event_id, "reaction_event_id")?;
+    let builder = buzz_sdk::build_remove_reaction(target)
+        .map_err(|e| PyValueError::new_err(format!("build_remove_reaction: {e}")))?;
+    sign(builder, &keys)
+}
+
+/// Build and sign an edit (kind 40003) replacing one of our own channel
+/// messages. The relay applies it to `target_event_id` within `channel_id`.
+#[pyfunction]
+fn build_edit_event(
+    secret: &str,
+    channel_id: &str,
+    target_event_id: &str,
+    new_content: &str,
+) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let cid = channel_uuid(channel_id)?;
+    let target = event_id(target_event_id, "target_event_id")?;
+    let builder = buzz_sdk::build_edit(cid, target, new_content)
+        .map_err(|e| PyValueError::new_err(format!("build_edit: {e}")))?;
+    sign(builder, &keys)
+}
+
+/// Build and sign a message delete tombstone (kind 9005). `reason`, when
+/// given, becomes the room-facing `public_reason` tag. Management kind —
+/// publish over the WebSocket.
+#[pyfunction]
+#[pyo3(signature = (secret, channel_id, target_event_id, reason=None))]
+fn build_delete_message_event(
+    secret: &str,
+    channel_id: &str,
+    target_event_id: &str,
+    reason: Option<&str>,
+) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let cid = channel_uuid(channel_id)?;
+    let target = event_id(target_event_id, "target_event_id")?;
+    let options = buzz_sdk::DeleteMessageOptions {
+        public_reason: reason,
+        ..Default::default()
+    };
+    let builder = buzz_sdk::build_delete_message_with_options(cid, target, options)
+        .map_err(|e| PyValueError::new_err(format!("build_delete_message: {e}")))?;
+    sign(builder, &keys)
+}
+
+/// Build and sign a channel topic change (kind 9002). Management kind —
+/// publish over the WebSocket.
+#[pyfunction]
+fn build_set_topic_event(secret: &str, channel_id: &str, topic: &str) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let cid = channel_uuid(channel_id)?;
+    let builder = buzz_sdk::build_set_topic(cid, topic)
+        .map_err(|e| PyValueError::new_err(format!("build_set_topic: {e}")))?;
+    sign(builder, &keys)
+}
+
+/// Build and sign a channel leave request (kind 9022). Management kind —
+/// publish over the WebSocket.
+#[pyfunction]
+fn build_leave_event(secret: &str, channel_id: &str) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let cid = channel_uuid(channel_id)?;
+    let builder = buzz_sdk::build_leave(cid)
+        .map_err(|e| PyValueError::new_err(format!("build_leave: {e}")))?;
+    sign(builder, &keys)
 }
 
 /// Build and sign a NIP-42 AUTH event (kind 22242) for a relay challenge.
@@ -328,6 +439,12 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_keypair, m)?)?;
     m.add_function(wrap_pyfunction!(pubkey_from_secret, m)?)?;
     m.add_function(wrap_pyfunction!(build_message_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_reaction_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_remove_reaction_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_edit_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_delete_message_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_set_topic_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_leave_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_auth_event, m)?)?;
     m.add_function(wrap_pyfunction!(compute_auth_tag, m)?)?;
     m.add_function(wrap_pyfunction!(verify_auth_tag, m)?)?;
@@ -341,8 +458,13 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_user_status_event, m)?)?;
 
     // Buzz event kinds (subset — mirrors buzz-core/src/kind.rs).
+    m.add("KIND_DELETION", 5u16)?;
     m.add("KIND_REACTION", 7u16)?;
     m.add("KIND_STREAM_MESSAGE", 9u16)?;
+    m.add("KIND_EDIT_METADATA", 9002u16)?;
+    m.add("KIND_DELETE_MESSAGE", 9005u16)?;
+    m.add("KIND_LEAVE_CHANNEL", 9022u16)?;
+    m.add("KIND_MESSAGE_EDIT", 40003u16)?;
     m.add("KIND_PRESENCE_UPDATE", 20001u16)?;
     m.add("KIND_AUTH", 22242u16)?;
     m.add("KIND_HTTP_AUTH", 27235u16)?;

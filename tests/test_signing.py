@@ -36,6 +36,76 @@ def test_tamper_is_detected():
     assert buzzkit.verify_event(json.dumps(event)) is False
 
 
+def test_message_reply_threading():
+    nsec, _, _ = buzzkit.generate_keypair()
+    channel_id = str(uuid.uuid4())
+    parent = "a" * 64
+    root = "b" * 64
+
+    direct = json.loads(buzzkit.build_message_event(nsec, channel_id, "re", reply_to=parent))
+    assert ["e", parent, "", "reply"] in direct["tags"]
+    assert not any(t[-1] == "root" for t in direct["tags"])
+
+    nested = json.loads(
+        buzzkit.build_message_event(nsec, channel_id, "re", reply_to=parent, reply_root=root)
+    )
+    assert ["e", root, "", "root"] in nested["tags"]
+    assert ["e", parent, "", "reply"] in nested["tags"]
+
+    with pytest.raises(ValueError):
+        buzzkit.build_message_event(nsec, channel_id, "re", reply_root=root)
+    with pytest.raises(ValueError):
+        buzzkit.build_message_event(nsec, channel_id, "re", reply_to="not-an-event-id")
+
+
+def test_reaction_events():
+    nsec, _, _ = buzzkit.generate_keypair()
+    target = "c" * 64
+    reaction = json.loads(buzzkit.build_reaction_event(nsec, target, "👍"))
+    assert reaction["kind"] == buzzkit.KIND_REACTION == 7
+    assert reaction["content"] == "👍"
+    assert ["e", target] in reaction["tags"]
+
+    removal = json.loads(buzzkit.build_remove_reaction_event(nsec, reaction["id"]))
+    assert removal["kind"] == buzzkit.KIND_DELETION == 5
+    assert ["e", reaction["id"]] in removal["tags"]
+
+
+def test_edit_and_delete_message_events():
+    nsec, _, _ = buzzkit.generate_keypair()
+    channel_id = str(uuid.uuid4())
+    target = "d" * 64
+
+    edit = json.loads(buzzkit.build_edit_event(nsec, channel_id, target, "fixed"))
+    assert edit["kind"] == buzzkit.KIND_MESSAGE_EDIT == 40003
+    assert edit["content"] == "fixed"
+    assert ["h", channel_id] in edit["tags"]
+    assert ["e", target] in edit["tags"]
+
+    delete = json.loads(buzzkit.build_delete_message_event(nsec, channel_id, target))
+    assert delete["kind"] == buzzkit.KIND_DELETE_MESSAGE == 9005
+    assert ["e", target] in delete["tags"]
+    assert not any(t[0] == "public_reason" for t in delete["tags"])
+
+    moderated = json.loads(
+        buzzkit.build_delete_message_event(nsec, channel_id, target, reason="spam")
+    )
+    assert ["public_reason", "spam"] in moderated["tags"]
+
+
+def test_topic_and_leave_events():
+    nsec, _, _ = buzzkit.generate_keypair()
+    channel_id = str(uuid.uuid4())
+
+    topic = json.loads(buzzkit.build_set_topic_event(nsec, channel_id, "daily standup"))
+    assert topic["kind"] == buzzkit.KIND_EDIT_METADATA == 9002
+    assert ["topic", "daily standup"] in topic["tags"]
+
+    leave = json.loads(buzzkit.build_leave_event(nsec, channel_id))
+    assert leave["kind"] == buzzkit.KIND_LEAVE_CHANNEL == 9022
+    assert ["h", channel_id] in leave["tags"]
+
+
 def test_invalid_channel_id_raises():
     nsec, _, _ = buzzkit.generate_keypair()
     with pytest.raises(ValueError):

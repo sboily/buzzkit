@@ -96,11 +96,56 @@ class BuzzClient:
             return r.json()
 
     async def send_message(
-        self, channel_id: str, content: str, mentions: list[str] | None = None
+        self,
+        channel_id: str,
+        content: str,
+        mentions: list[str] | None = None,
+        *,
+        reply_to: str | None = None,
+        reply_root: str | None = None,
     ) -> dict:
-        """Build + post a channel chat message (kind 9)."""
-        ev = _native.build_message_event(self._secret, channel_id, content, mentions)
+        """Build + post a channel chat message (kind 9).
+
+        ``reply_to`` threads the message under that event id; for a nested
+        reply also pass ``reply_root`` (the thread's root event id).
+        """
+        ev = _native.build_message_event(
+            self._secret, channel_id, content, mentions, reply_to, reply_root
+        )
         return await self.post_event(ev)
+
+    async def react(self, target_event_id: str, emoji: str = "👍") -> dict:
+        """React to an event (kind 7)."""
+        ev = _native.build_reaction_event(self._secret, target_event_id, emoji)
+        return await self.post_event(ev)
+
+    async def remove_reaction(self, reaction_event_id: str) -> dict:
+        """Delete one of our own reactions (kind 5) by its event id."""
+        ev = _native.build_remove_reaction_event(self._secret, reaction_event_id)
+        return await self.post_event(ev)
+
+    async def edit_message(self, channel_id: str, target_event_id: str, content: str) -> dict:
+        """Replace one of our own messages (kind 40003)."""
+        ev = _native.build_edit_event(self._secret, channel_id, target_event_id, content)
+        return await self.post_event(ev)
+
+    async def delete_message(
+        self, channel_id: str, target_event_id: str, *, reason: str | None = None
+    ) -> dict:
+        """Delete a message (kind 9005 tombstone). Management kind — needs
+        :meth:`connect` first; ``reason`` is shown room-facing."""
+        ev = _native.build_delete_message_event(self._secret, channel_id, target_event_id, reason)
+        return await self.publish(ev)
+
+    async def set_topic(self, channel_id: str, topic: str) -> dict:
+        """Set a channel's topic (kind 9002). Needs :meth:`connect` first."""
+        ev = _native.build_set_topic_event(self._secret, channel_id, topic)
+        return await self.publish(ev)
+
+    async def leave_channel(self, channel_id: str) -> dict:
+        """Leave a channel (kind 9022). Needs :meth:`connect` first."""
+        ev = _native.build_leave_event(self._secret, channel_id)
+        return await self.publish(ev)
 
     async def set_profile(
         self,
