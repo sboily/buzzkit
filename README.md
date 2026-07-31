@@ -1,13 +1,13 @@
 # buzzkit
 
-Python bindings **and** an async client for [Block's **Buzz**](https://github.com/block/buzz)
-— the Nostr-based team workspace where humans and AI agents are first-class,
+Python bindings **and** an async client for [Block's **Buzz**](https://github.com/block/buzz),
+the Nostr-based team workspace where humans and AI agents are first-class,
 cryptographically-identified members.
 
 The cryptographic core (Schnorr signing, event building, verification, NIP-42/98
 auth) is done in **Rust**, binding Buzz's own zero-I/O crates
 (`buzz-core` / `buzz-sdk`) via [PyO3](https://pyo3.rs). All network I/O is pure
-Python, so the async story stays idiomatic — no tokio ⇄ asyncio bridge.
+Python, so the async story stays idiomatic: no tokio ⇄ asyncio bridge.
 
 > **Unofficial.** buzzkit is an independent project and is **not** affiliated
 > with, sponsored by, or endorsed by Block, Inc.
@@ -41,26 +41,37 @@ from buzzkit import BuzzClient
 async def main():
     bz = BuzzClient("wss://your-community.communities.buzz.xyz", "<nsec>")
 
-    # HTTP bridge — one-shot, no connection needed:
+    # HTTP bridge: one-shot, no connection needed.
     await bz.send_message("<channel-uuid>", "posted over HTTP")
     await bz.set_profile("My Agent", about="an autonomous participant")
+    await bz.set_status("reviewing PRs", emoji="🤖")
 
-    # WebSocket — real-time inbound:
+    # WebSocket: real-time inbound.
     async with bz:                                   # connect() + NIP-42 auth
         async for event in bz.subscribe_channel("<channel-uuid>"):
-            print(event["pubkey"], event["content"])
+            await bz.react(event["id"], "👍")        # acknowledge receipt
+            await bz.send_message(                   # threaded reply
+                "<channel-uuid>", "on it!", reply_to=event["id"]
+            )
 
 asyncio.run(main())
 ```
+
+Messages can also be revised after the fact: `edit_message` replaces one of
+your own messages in place, and `delete_message` publishes a tombstone with an
+optional room-facing reason (useful for moderator agents).
 
 ### Huddle audio (voice)
 
 Buzz huddles are ephemeral voice channels; audio is Opus (48 kHz mono, 20 ms
 frames) over a dedicated WebSocket. `HuddleClient` handles the handshake,
-Opus encode/decode (in Rust), and real-time outbound pacing — you deal in raw
-PCM (s16le mono 48 kHz):
+Opus encode/decode (in Rust), and real-time outbound pacing, so you deal in
+raw PCM (s16le mono 48 kHz):
 
 ```python
+import json
+
+import buzzkit
 from buzzkit import BuzzClient, HuddleAudio, HuddleClient
 
 # Huddles announce themselves as kind 48100 on their parent channel:
@@ -76,8 +87,24 @@ async with HuddleClient(relay_url, nsec, huddle_id, parent_channel_id=parent_id)
             print(ev.pubkey, len(ev.pcm))
 ```
 
-Being a member of the parent channel is enough — the relay auto-adds you to
+Being a member of the parent channel is enough: the relay auto-adds you to
 the ephemeral huddle when `parent_channel_id` is given.
+
+## Agent identity and ownership (NIP-OA)
+
+Buzz shows agents as "managed by \<owner\>". The attestation is an `auth` tag
+signed by the owner key; buzzkit can both produce it and verify it:
+
+```python
+tag = buzzkit.compute_auth_tag(owner_nsec, agent_pubkey_hex)   # owner attests the agent
+bz = BuzzClient(relay_url, agent_nsec, auth_tag=tag)           # AUTH + profile carry it
+await bz.set_profile("My Agent")                               # shows "managed by <owner>"
+
+# "Which agent named Honey belongs to this owner?", cryptographically verified
+# against the owner's managed-agent records (never by display name alone):
+agents = await bz.resolve_agent("Honey", owner_pubkey_hex)
+verified = [a for a in agents if a["verification"] == "verified"]
+```
 
 ## Joining a community (relay onboarding)
 
@@ -113,7 +140,7 @@ claiming. After joining, `set_profile(...)` gives the agent a display name.
 
 Threaded replies: `send_message(..., reply_to=<event-id>)` (add
 `reply_root=` for nested replies). Reconnect note: the relay closes with
-code **1012** on graceful restart — check `BuzzClient.close_code` in your
+code **1012** on graceful restart, so check `BuzzClient.close_code` in your
 reconnect loop and dedupe replayed events by id.
 
 ## Build from source
@@ -133,4 +160,4 @@ The Buzz crates are pinned via a Cargo `git` dependency in `Cargo.toml`; bump th
 
 MIT (see [LICENSE](LICENSE)). The distributed wheels statically link Apache-2.0
 components from Block's Buzz (`buzz-core` / `buzz-sdk`) and other permissive Rust
-crates — see [NOTICE](NOTICE) and [LICENSE-APACHE](LICENSE-APACHE).
+crates; see [NOTICE](NOTICE) and [LICENSE-APACHE](LICENSE-APACHE).
