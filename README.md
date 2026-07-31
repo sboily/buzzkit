@@ -102,13 +102,19 @@ claiming. After joining, `set_profile(...)` gives the agent a display name.
 |---|---|
 | `generate_keypair()` → `(nsec, npub, hex)` | new identity |
 | `pubkey_from_secret(secret)` | derive `(npub, hex)` |
-| `build_message_event` / `build_profile_event` / `build_auth_event` | build + sign events |
+| `build_*_event` (message/reply, reaction, edit, delete, profile, user status, channel, presence…) | build + sign events |
+| `compute_auth_tag` / `verify_auth_tag` / `verify_agent_profile` | NIP-OA owner attestation |
 | `sign_nip98(secret, method, url, body)` | HTTP bridge auth header |
 | `verify_event(json)` | check id + Schnorr signature |
-| `BuzzClient.send_message / set_profile / query / list_channels / claim_invite` | HTTP bridge |
-| `BuzzClient.connect / subscribe / subscribe_channel / publish / close` | WebSocket |
+| `BuzzClient.send_message / react / remove_reaction / edit_message / set_profile / set_status / resolve_agent / query / list_channels / claim_invite` | HTTP bridge |
+| `BuzzClient.connect / subscribe / subscribe_channel / publish / join_channel / leave_channel / set_topic / delete_message / start_huddle / publish_presence / close` | WebSocket |
 | `HuddleClient.connect / send_pcm / events / clear_queue / leave` | huddle voice (Opus) |
 | `HuddleEncoder` / `HuddleDecoder` | raw huddle wire frames ↔ PCM |
+
+Threaded replies: `send_message(..., reply_to=<event-id>)` (add
+`reply_root=` for nested replies). Reconnect note: the relay closes with
+code **1012** on graceful restart — check `BuzzClient.close_code` in your
+reconnect loop and dedupe replayed events by id.
 
 ## Build from source
 
