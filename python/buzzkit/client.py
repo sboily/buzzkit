@@ -37,6 +37,17 @@ _OK_TIMEOUT = 20.0
 _MAX_FRAME = 1 << 20  # 1 MiB — matches the relay's max frame size
 
 
+def _checked(r: httpx.Response) -> httpx.Response:
+    """Raise a readable error carrying the relay's response body on 4xx/5xx.
+
+    The bridge explains rejections in the body (e.g. ``{"error": "invalid:
+    edit target event not found"}``); a bare ``raise_for_status`` hides it.
+    """
+    if r.status_code >= 400:
+        raise RuntimeError(f"HTTP bridge error {r.status_code} on {r.url.path}: {r.text}")
+    return r
+
+
 def _to_http(relay_url: str) -> str:
     u = relay_url.rstrip("/")
     if u.startswith("wss://"):
@@ -83,7 +94,12 @@ class BuzzClient:
         return _native.sign_nip98(self._secret, method, url, body)
 
     async def post_event(self, event_json: str) -> dict:
-        """POST a signed event to the HTTP bridge (non-ephemeral kinds only)."""
+        """POST a signed event to the HTTP bridge (non-ephemeral kinds only).
+
+        The bridge acknowledges before the event is fully indexed: a revision
+        (edit/delete/reaction) sent immediately after its target can be
+        rejected with "target event not found". Retrying is the caller's call.
+        """
         url = f"{self._http}/events"
         body = event_json.encode("utf-8")
         headers = {
@@ -91,9 +107,7 @@ class BuzzClient:
             "Content-Type": "application/json",
         }
         async with httpx.AsyncClient(timeout=20.0) as c:
-            r = await c.post(url, content=body, headers=headers)
-            r.raise_for_status()
-            return r.json()
+            return _checked(await c.post(url, content=body, headers=headers)).json()
 
     async def send_message(
         self,
@@ -234,9 +248,7 @@ class BuzzClient:
             "Content-Type": "application/json",
         }
         async with httpx.AsyncClient(timeout=20.0) as c:
-            r = await c.post(url, content=body, headers=headers)
-            r.raise_for_status()
-            data = r.json()
+            data = _checked(await c.post(url, content=body, headers=headers)).json()
             return data if isinstance(data, list) else []
 
     async def list_channels(self) -> list[dict]:
@@ -323,8 +335,7 @@ class BuzzClient:
                         "age_confirmed": True,
                     },
                 )
-                rp.raise_for_status()
-                receipt = rp.json()["receipt"]
+                receipt = _checked(rp).json()["receipt"]
             payload: dict = {"code": code}
             if receipt:
                 payload["policy_receipt"] = receipt
@@ -335,8 +346,7 @@ class BuzzClient:
                 "Content-Type": "application/json",
             }
             rc = await c.post(url, content=body, headers=headers)
-            rc.raise_for_status()
-            return rc.json()
+            return _checked(rc).json()
 
     # ------------------------------------------------------------- WebSocket
 
