@@ -48,6 +48,9 @@ def build_huddle_started_event(
 def build_presence_event(secret: str, status: str = ...) -> str:
     """Build + sign a presence event (kind 20001); status online/away/offline."""
 
+def build_user_status_event(secret: str, text: str, emoji: str | None = ...) -> str:
+    """Build + sign a NIP-38 user status event (kind 30315, ``d:general``)."""
+
 def build_auth_event(
     secret: str, challenge: str, relay_url: str, auth_tag: str | None = ...
 ) -> str:
@@ -55,6 +58,9 @@ def build_auth_event(
 
 def compute_auth_tag(owner_secret: str, agent_pubkey_hex: str, conditions: str = ...) -> str:
     """Compute a NIP-OA owner-attestation tag JSON attesting an agent pubkey."""
+
+def verify_auth_tag(auth_tag_json: str, agent_pubkey_hex: str) -> str:
+    """Verify a NIP-OA auth tag against an agent pubkey; returns the owner hex."""
 
 def sign_nip98(secret: str, method: str, url: str, body: bytes | None = ...) -> str:
     """Return an ``Authorization: Nostr <base64>`` header value (NIP-98)."""
@@ -93,6 +99,8 @@ KIND_HTTP_AUTH: int
 KIND_STREAM_MESSAGE_V2: int
 KIND_ADD_MEMBER: int
 KIND_CREATE_CHANNEL: int
+KIND_MANAGED_AGENT: int
+KIND_USER_STATUS: int
 KIND_HUDDLE_STARTED: int
 KIND_HUDDLE_PARTICIPANT_JOINED: int
 KIND_HUDDLE_PARTICIPANT_LEFT: int
