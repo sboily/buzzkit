@@ -136,8 +136,10 @@ fn build_edit_event(
 }
 
 /// Build and sign a message delete tombstone (kind 9005). `reason`, when
-/// given, becomes the room-facing `public_reason` tag. Management kind —
-/// publish over the WebSocket.
+/// given, becomes the room-facing `public_reason` tag — which marks the
+/// tombstone as a moderation action the relay only accepts from a channel
+/// owner/admin (authors deleting their own message must omit it).
+/// Management kind — publish over the WebSocket.
 #[pyfunction]
 #[pyo3(signature = (secret, channel_id, target_event_id, reason=None))]
 fn build_delete_message_event(

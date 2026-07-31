@@ -147,7 +147,12 @@ class BuzzClient:
         self, channel_id: str, target_event_id: str, *, reason: str | None = None
     ) -> dict:
         """Delete a message (kind 9005 tombstone). Management kind — needs
-        :meth:`connect` first; ``reason`` is shown room-facing."""
+        :meth:`connect` first.
+
+        ``reason`` (the room-facing ``public_reason``) marks the tombstone as
+        a MODERATION action: the relay then requires channel owner/admin
+        rights, and rejects it even for the message's own author. Omit it to
+        delete your own message."""
         ev = _native.build_delete_message_event(self._secret, channel_id, target_event_id, reason)
         return await self.publish(ev)
 
