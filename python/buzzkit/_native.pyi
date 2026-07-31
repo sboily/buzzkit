@@ -7,9 +7,37 @@ def pubkey_from_secret(secret: str) -> tuple[str, str]:
     """Return ``(npub, pubkey_hex)`` for a secret (hex or ``nsec…``)."""
 
 def build_message_event(
-    secret: str, channel_id: str, content: str, mentions: list[str] | None = ...
+    secret: str,
+    channel_id: str,
+    content: str,
+    mentions: list[str] | None = ...,
+    reply_to: str | None = ...,
+    reply_root: str | None = ...,
 ) -> str:
-    """Build + sign a channel message (kind 9); returns NIP-01 event JSON."""
+    """Build + sign a channel message (kind 9); returns NIP-01 event JSON.
+
+    ``reply_to`` threads the message; ``reply_root`` marks a nested reply.
+    """
+
+def build_reaction_event(secret: str, target_event_id: str, emoji: str) -> str:
+    """Build + sign a reaction (kind 7) to an event."""
+
+def build_remove_reaction_event(secret: str, reaction_event_id: str) -> str:
+    """Build + sign a deletion (kind 5) of one of our own reactions."""
+
+def build_edit_event(secret: str, channel_id: str, target_event_id: str, new_content: str) -> str:
+    """Build + sign a message edit (kind 40003)."""
+
+def build_delete_message_event(
+    secret: str, channel_id: str, target_event_id: str, reason: str | None = ...
+) -> str:
+    """Build + sign a message delete tombstone (kind 9005)."""
+
+def build_set_topic_event(secret: str, channel_id: str, topic: str) -> str:
+    """Build + sign a channel topic change (kind 9002)."""
+
+def build_leave_event(secret: str, channel_id: str) -> str:
+    """Build + sign a channel leave request (kind 9022)."""
 
 def build_profile_event(
     secret: str,
@@ -91,8 +119,13 @@ class HuddleDecoder:
     def remove_peer(self, peer_index: int) -> None:
         """Forget a peer's decoder state (indexes are recycled by the relay)."""
 
+KIND_DELETION: int
 KIND_REACTION: int
 KIND_STREAM_MESSAGE: int
+KIND_EDIT_METADATA: int
+KIND_DELETE_MESSAGE: int
+KIND_LEAVE_CHANNEL: int
+KIND_MESSAGE_EDIT: int
 KIND_PRESENCE_UPDATE: int
 KIND_AUTH: int
 KIND_HTTP_AUTH: int
