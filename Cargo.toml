@@ -19,8 +19,8 @@ pyo3 = { version = "0.24", features = ["abi3-py312"] }
 # Event/Keys/EventBuilder types unify across crate boundaries.
 nostr = { version = "0.44", features = ["nip44", "nip98"] }
 # Pinned to a specific Buzz commit; bump deliberately to track their kind churn.
-buzz-core = { git = "https://github.com/block/buzz", rev = "acfbb1bb6af54cb29cb152496ff43b8285dcb8cf", package = "buzz-core" }
-buzz-sdk = { git = "https://github.com/block/buzz", rev = "acfbb1bb6af54cb29cb152496ff43b8285dcb8cf", package = "buzz-sdk" }
+buzz-core = { git = "https://github.com/block/buzz", rev = "209536ade6c5ebf7fa82671d7ca0b74f599a40cc", package = "buzz-core" }
+buzz-sdk = { git = "https://github.com/block/buzz", rev = "209536ade6c5ebf7fa82671d7ca0b74f599a40cc", package = "buzz-sdk" }
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
 hex = "0.4"
