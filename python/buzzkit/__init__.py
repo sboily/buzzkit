@@ -9,6 +9,8 @@ This is an independent, unofficial project — not affiliated with Block, Inc.
 
 from __future__ import annotations
 
+from importlib.metadata import version as _version
+
 from ._native import (
     HUDDLE_FRAME_SAMPLES,
     HUDDLE_PROTOCOL_VERSION,
@@ -55,7 +57,7 @@ from .huddle import (
     HuddlePeerLeft,
 )
 
-__version__ = "0.1.3"
+__version__ = _version("buzzkit")
 
 __all__ = [
     "HUDDLE_FRAME_SAMPLES",
