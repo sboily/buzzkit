@@ -115,6 +115,19 @@ fn compute_auth_tag(
         .map_err(|e| PyValueError::new_err(format!("compute_auth_tag: {e}")))
 }
 
+/// Verify a NIP-OA `auth` tag JSON against an agent pubkey. Returns the
+/// attesting OWNER's pubkey hex. Raises `ValueError` on malformed tags, bad
+/// signatures, or self-attestation. Signature validity only — whether the
+/// tag's conditions apply to a given event is the caller's check.
+#[pyfunction]
+fn verify_auth_tag(auth_tag_json: &str, agent_pubkey_hex: &str) -> PyResult<String> {
+    let agent_pubkey = PublicKey::from_hex(agent_pubkey_hex)
+        .map_err(|e| PyValueError::new_err(format!("invalid agent pubkey: {e}")))?;
+    let owner = buzz_sdk::nip_oa::verify_auth_tag(auth_tag_json, &agent_pubkey)
+        .map_err(|e| PyValueError::new_err(format!("verify_auth_tag: {e}")))?;
+    Ok(owner.to_hex())
+}
+
 /// Sign a NIP-98 HTTP-auth event (kind 27235). Returns the
 /// `Authorization: Nostr <base64>` header value for the Buzz HTTP bridge.
 #[pyfunction]
@@ -211,6 +224,9 @@ fn build_join_channel_event(secret: &str, channel_id: &str) -> PyResult<String> 
 /// `channel_type` is "stream", "forum", "dm", or "workflow". A `ttl` in
 /// seconds makes the channel ephemeral (huddles use private/stream/3600).
 /// Management kinds go over the WebSocket, not the HTTP bridge.
+///
+/// `name` is canonicalized: leading `#` and whitespace are stripped, and a
+/// name that canonicalizes to empty raises `ValueError`.
 #[pyfunction]
 #[pyo3(signature = (secret, channel_id, name, visibility=None, channel_type=None, about=None, ttl=None))]
 fn build_create_channel_event(
@@ -292,6 +308,21 @@ fn build_presence_event(secret: &str, status: &str) -> PyResult<String> {
     Ok(event.as_json())
 }
 
+/// Build and sign a NIP-38 user status event (kind 30315, `d:general`).
+/// `text` is the status; `emoji`, when given, becomes an `["emoji", …]` tag.
+/// Blank text with no emoji clears the status. Non-ephemeral — post over the
+/// HTTP bridge.
+#[pyfunction]
+#[pyo3(signature = (secret, text, emoji=None))]
+fn build_user_status_event(secret: &str, text: &str, emoji: Option<&str>) -> PyResult<String> {
+    let keys = keys_from_secret(secret)?;
+    let event = buzz_sdk::build_user_status(text, emoji)
+        .map_err(|e| PyValueError::new_err(format!("build_user_status: {e}")))?
+        .sign_with_keys(&keys)
+        .map_err(|e| PyValueError::new_err(format!("sign: {e}")))?;
+    Ok(event.as_json())
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate_keypair, m)?)?;
@@ -299,6 +330,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_message_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_auth_event, m)?)?;
     m.add_function(wrap_pyfunction!(compute_auth_tag, m)?)?;
+    m.add_function(wrap_pyfunction!(verify_auth_tag, m)?)?;
     m.add_function(wrap_pyfunction!(sign_nip98, m)?)?;
     m.add_function(wrap_pyfunction!(verify_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_profile_event, m)?)?;
@@ -306,6 +338,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_create_channel_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_huddle_started_event, m)?)?;
     m.add_function(wrap_pyfunction!(build_presence_event, m)?)?;
+    m.add_function(wrap_pyfunction!(build_user_status_event, m)?)?;
 
     // Buzz event kinds (subset — mirrors buzz-core/src/kind.rs).
     m.add("KIND_REACTION", 7u16)?;
@@ -316,6 +349,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("KIND_STREAM_MESSAGE_V2", 40002u16)?;
     m.add("KIND_ADD_MEMBER", 9000u16)?;
     m.add("KIND_CREATE_CHANNEL", 9007u16)?;
+    m.add("KIND_MANAGED_AGENT", 30177u16)?;
+    m.add("KIND_USER_STATUS", 30315u16)?;
     m.add("KIND_HUDDLE_STARTED", 48100u16)?;
     m.add("KIND_HUDDLE_PARTICIPANT_JOINED", 48101u16)?;
     m.add("KIND_HUDDLE_PARTICIPANT_LEFT", 48102u16)?;

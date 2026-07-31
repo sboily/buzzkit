@@ -28,6 +28,7 @@ import httpx
 import websockets
 
 from . import _native
+from .agents import verify_agent_profile
 
 logger = logging.getLogger("buzzkit.client")
 
@@ -64,6 +65,11 @@ class BuzzClient:
         self._secret = secret
         self._auth_tag = auth_tag  # NIP-OA owner attestation (AUTH + profile)
         self.npub, self.pubkey_hex = _native.pubkey_from_secret(secret)
+        #: WebSocket close code from the last disconnect (``None`` while
+        #: connected or never connected). 1012 means the relay is restarting
+        #: (graceful drain): reconnect with backoff and dedupe replayed
+        #: events by id after resubscribing.
+        self.close_code: int | None = None
         self._ws: Any = None
         self._reader: asyncio.Task | None = None
         self._authed = asyncio.Event()
@@ -160,9 +166,19 @@ class BuzzClient:
         return huddle_id
 
     async def publish_presence(self, status: str = "online") -> dict:
-        """Announce presence (kind 20001, ephemeral) over the WebSocket."""
+        """Announce presence (kind 20001, ephemeral) over the WebSocket.
+
+        Cadence is the caller's job. Relays at buzz >= v0.5.x hold presence
+        for a 180 s TTL and expect a heartbeat every 60 s; older relays used
+        90 s / 30 s. When the relay version is unknown, 30 s is safe on both.
+        """
         ev = _native.build_presence_event(self._secret, status)
         return await self.publish(ev)
+
+    async def set_status(self, text: str, *, emoji: str | None = None) -> dict:
+        """Publish a NIP-38 user status (kind 30315). Empty text clears it."""
+        ev = _native.build_user_status_event(self._secret, text, emoji)
+        return await self.post_event(ev)
 
     async def query(self, filters: list[dict]) -> list[dict]:
         """Run a NIP-01 REQ over the HTTP bridge; returns a list of events."""
@@ -185,6 +201,64 @@ class BuzzClient:
             tags = {t[0]: t[1] for t in ev.get("tags", []) if len(t) >= 2}
             out.append({"channel_id": tags.get("d"), "name": tags.get("name"), "event": ev})
         return out
+
+    async def resolve_agent(self, name: str, owner_pubkey: str | None = None) -> list[dict]:
+        """Resolve agents named ``name`` from an owner's managed-agent records.
+
+        Mirrors upstream ``buzz users get --name X --owner …``: only kind-30177
+        records authored by the owner are consulted (exact name match,
+        case-insensitive), and each candidate's kind-0 profile must carry
+        exactly one valid NIP-OA auth tag from that owner — cryptographically
+        verified — to count as owned.
+
+        ``owner_pubkey`` defaults to this client's own owner: the attesting
+        pubkey of its NIP-OA auth tag, or its own pubkey without one. Returns
+        one dict per candidate: ``{pubkey, verification, profile}`` plus
+        ``owner_pubkey`` when ``verification == "verified"``.
+        """
+        owner = owner_pubkey or self.owner_pubkey_hex
+        records = await self.query(
+            [{"kinds": [_native.KIND_MANAGED_AGENT], "authors": [owner], "limit": 1000}]
+        )
+        pubkeys: set[str] = set()
+        for ev in records:
+            try:
+                record_name = json.loads(ev.get("content", ""))["name"]
+            except (json.JSONDecodeError, TypeError, KeyError):
+                continue
+            if not isinstance(record_name, str) or record_name.lower() != name.lower():
+                continue
+            d_tag = next((t[1] for t in ev.get("tags", []) if len(t) >= 2 and t[0] == "d"), "")
+            if d_tag:
+                pubkeys.add(d_tag)
+        if not pubkeys:
+            return []
+        profiles = await self.query([{"kinds": [0], "authors": sorted(pubkeys), "limit": 1000}])
+        by_author = {ev["pubkey"]: ev for ev in profiles if "pubkey" in ev}
+        out = []
+        for pk in sorted(pubkeys):
+            profile = by_author.get(pk)
+            if profile is None:
+                verification = "missing_profile"
+                content: dict = {}
+            else:
+                verification = verify_agent_profile(profile, owner)
+                try:
+                    content = json.loads(profile.get("content", "") or "{}")
+                except json.JSONDecodeError:
+                    content = {}
+            entry = {"pubkey": pk, "verification": verification, "profile": content}
+            if verification == "verified":
+                entry["owner_pubkey"] = owner
+            out.append(entry)
+        return out
+
+    @property
+    def owner_pubkey_hex(self) -> str:
+        """This identity's effective owner: its auth-tag attester, else itself."""
+        if self._auth_tag is not None:
+            return json.loads(self._auth_tag)[1]
+        return self.pubkey_hex
 
     async def claim_invite(self, code_or_url: str) -> dict:
         """Redeem a relay invite: accept the join-policy (if any), then claim.
@@ -231,6 +305,7 @@ class BuzzClient:
     async def connect(self) -> None:
         """Open the WebSocket and complete the NIP-42 auth handshake."""
         self._authed.clear()
+        self.close_code = None
         self._ws = await websockets.connect(self._ws_url, max_size=_MAX_FRAME)
         self._reader = asyncio.create_task(self._read_loop())
         await asyncio.wait_for(self._authed.wait(), timeout=_AUTH_TIMEOUT)
@@ -263,8 +338,10 @@ class BuzzClient:
                         await q.put(("closed", msg[2] if len(msg) > 2 else ""))
                 elif typ == "NOTICE":
                     logger.warning("relay NOTICE: %s", msg[1] if len(msg) > 1 else "")
-        except websockets.ConnectionClosed:
-            logger.info("buzz websocket closed")
+        except websockets.ConnectionClosed as e:
+            close = e.rcvd or e.sent
+            self.close_code = close.code if close else None
+            logger.info("buzz websocket closed (code %s)", self.close_code)
         finally:
             for q in self._subs.values():
                 q.put_nowait(("closed", "connection lost"))

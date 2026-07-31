@@ -116,6 +116,42 @@ def test_create_channel_event():
         buzzkit.build_create_channel_event(nsec, channel_id, "x", visibility="bogus")
 
 
+def test_create_channel_name_is_canonicalized():
+    # Since buzz v0.5.x, build_create_channel strips leading '#' (and
+    # whitespace) and rejects names that canonicalize to empty.
+    nsec, _, _ = buzzkit.generate_keypair()
+    event = json.loads(buzzkit.build_create_channel_event(nsec, str(uuid.uuid4()), "###dev"))
+    tags = {t[0]: t[1] for t in event["tags"]}
+    assert tags["name"] == "dev"
+    with pytest.raises(ValueError):
+        buzzkit.build_create_channel_event(nsec, str(uuid.uuid4()), "  ###  ")
+
+
+def test_user_status_event():
+    nsec, _, _ = buzzkit.generate_keypair()
+    event = json.loads(buzzkit.build_user_status_event(nsec, "reviewing PRs", emoji="🤖"))
+    assert event["kind"] == buzzkit.KIND_USER_STATUS == 30315
+    assert event["content"] == "reviewing PRs"
+    assert ["d", "general"] in event["tags"]
+    assert ["emoji", "🤖"] in event["tags"]
+    cleared = json.loads(buzzkit.build_user_status_event(nsec, ""))
+    assert cleared["content"] == ""
+    assert not any(t[0] == "emoji" for t in cleared["tags"])
+
+
+def test_verify_auth_tag_roundtrip():
+    owner_nsec, _, owner_pk = buzzkit.generate_keypair()
+    _, _, agent_pk = buzzkit.generate_keypair()
+    tag = buzzkit.compute_auth_tag(owner_nsec, agent_pk, "kind=0")
+    assert buzzkit.verify_auth_tag(tag, agent_pk) == owner_pk
+    # The signature binds the agent pubkey: any other agent must fail.
+    _, _, other_pk = buzzkit.generate_keypair()
+    with pytest.raises(ValueError):
+        buzzkit.verify_auth_tag(tag, other_pk)
+    with pytest.raises(ValueError):
+        buzzkit.verify_auth_tag("not json", agent_pk)
+
+
 def test_huddle_started_event():
     nsec, _, _ = buzzkit.generate_keypair()
     parent, ephemeral = str(uuid.uuid4()), str(uuid.uuid4())
