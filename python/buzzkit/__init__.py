@@ -57,7 +57,7 @@ from ._native import (
     verify_auth_tag,
     verify_event,
 )
-from .agents import verify_agent_profile
+from .agents import OWNER_COMMANDS, parse_owner_command, verify_agent_profile
 from .client import BuzzClient
 from .huddle import (
     HuddleAudio,
@@ -93,6 +93,7 @@ __all__ = [
     "KIND_STREAM_MESSAGE",
     "KIND_STREAM_MESSAGE_V2",
     "KIND_USER_STATUS",
+    "OWNER_COMMANDS",
     "BuzzClient",
     "HuddleAudio",
     "HuddleClient",
@@ -120,6 +121,7 @@ __all__ = [
     "generate_keypair",
     "pubkey_from_secret",
     "sign_nip98",
+    "parse_owner_command",
     "verify_agent_profile",
     "verify_auth_tag",
     "verify_event",

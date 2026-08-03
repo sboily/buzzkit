@@ -76,6 +76,7 @@ class BuzzClient:
         self._secret = secret
         self._auth_tag = auth_tag  # NIP-OA owner attestation (AUTH + profile)
         self.npub, self.pubkey_hex = _native.pubkey_from_secret(secret)
+        self._verified_owner = self._verify_owner()  # attestations are immutable
         #: WebSocket close code from the last disconnect (``None`` while
         #: connected or never connected). 1012 means the relay is restarting
         #: (graceful drain): reconnect with backoff and dedupe replayed
@@ -317,10 +318,37 @@ class BuzzClient:
 
     @property
     def owner_pubkey_hex(self) -> str:
-        """This identity's effective owner: its auth-tag attester, else itself."""
+        """This identity's effective owner: its auth-tag attester, else itself.
+
+        Declared, not proven — this reads the tag's owner field without
+        verifying its signature. Anything that grants the owner privileges
+        (e.g. honoring ``!shutdown``) must use :attr:`verified_owner_hex`.
+        """
         if self._auth_tag is not None:
             return json.loads(self._auth_tag)[1]
         return self.pubkey_hex
+
+    def _verify_owner(self) -> str | None:
+        if self._auth_tag is None:
+            return None
+        try:
+            return _native.verify_auth_tag(self._auth_tag, self.pubkey_hex)
+        except ValueError as e:
+            logger.warning("auth tag does not verify for this identity: %s", e)
+            return None
+
+    @property
+    def verified_owner_hex(self) -> str | None:
+        """The owner pubkey hex *proven* by this client's NIP-OA auth tag.
+
+        The tag's Schnorr signature was verified against this client's own
+        pubkey (:func:`verify_auth_tag`) at construction. ``None`` when the
+        client has no auth tag or the tag does not verify — callers gating
+        privileged actions (e.g. honoring ``!shutdown``) must treat ``None``
+        as "no owner", never fall back to the unverified
+        :attr:`owner_pubkey_hex`.
+        """
+        return self._verified_owner
 
     async def claim_invite(self, code_or_url: str) -> dict:
         """Redeem a relay invite: accept the join-policy (if any), then claim.

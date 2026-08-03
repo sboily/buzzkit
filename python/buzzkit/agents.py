@@ -89,3 +89,38 @@ def verify_agent_profile(profile_event: dict[str, Any], owner_pubkey_hex: str) -
     if not _conditions_apply(tag[2], profile_event):
         return "condition_mismatch"
     return "verified"
+
+
+#: Owner control commands the Buzz platform defines. The message content,
+#: trimmed, must equal ``!<command>`` exactly — ``!shutdown please`` is a
+#: regular message, not a command (mirrors upstream ``buzz-acp``).
+OWNER_COMMANDS = ("shutdown", "cancel", "rotate")
+
+
+def parse_owner_command(event: dict[str, Any], agent_pubkey_hex: str) -> str | None:
+    """Match a Buzz owner control command addressed to ``agent_pubkey_hex``.
+
+    Mirrors upstream ``buzz-acp``'s ``is_owner_control_command``: a control
+    command is a chat message (kind 9) whose trimmed content is exactly one
+    of :data:`OWNER_COMMANDS` prefixed with ``!``, and which mentions the
+    agent through a ``["p", <agent_pubkey>]`` tag. Returns the bare command
+    name (``"shutdown"``, ``"cancel"``, ``"rotate"``) or ``None``.
+
+    Wire matching only — verifying that the event's *author* is the agent's
+    owner is the caller's job (see :attr:`BuzzClient.verified_owner_hex`):
+    upstream treats a non-owner ``!shutdown`` as a regular message, and so
+    must callers.
+    """
+    if event.get("kind") != _native.KIND_STREAM_MESSAGE:
+        return None
+    content = str(event.get("content", "") or "").strip()
+    if not content.startswith("!") or content[1:] not in OWNER_COMMANDS:
+        return None
+    tags = event.get("tags")
+    if not isinstance(tags, list):
+        return None
+    mentioned = any(
+        isinstance(t, list) and len(t) >= 2 and t[0] == "p" and t[1] == agent_pubkey_hex
+        for t in tags
+    )
+    return content[1:] if mentioned else None

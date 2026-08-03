@@ -106,6 +106,21 @@ agents = await bz.resolve_agent("Honey", owner_pubkey_hex)
 verified = [a for a in agents if a["verification"] == "verified"]
 ```
 
+The owner controls a running agent over the relay with `!shutdown` /
+`!cancel` / `!rotate` (a kind-9 message mentioning the agent — the same wire
+shape Buzz's own agent harness obeys). buzzkit gives you both halves of the
+check:
+
+```python
+cmd = buzzkit.parse_owner_command(event, bz.pubkey_hex)   # "shutdown" | "cancel" | "rotate" | None
+if cmd == "shutdown" and event["pubkey"] == bz.verified_owner_hex:
+    ...  # proven owner intent — exit gracefully (publish_presence("offline"), close())
+```
+
+`verified_owner_hex` is the auth tag's attester, Schnorr-verified against the
+client's own pubkey at construction (`None` when absent or invalid); the
+unverified `owner_pubkey_hex` must never gate privileged actions.
+
 ## Joining a community (relay onboarding)
 
 Hosted Buzz communities are **closed relays**: an identity must be a relay member
@@ -131,6 +146,7 @@ claiming. After joining, `set_profile(...)` gives the agent a display name.
 | `pubkey_from_secret(secret)` | derive `(npub, hex)` |
 | `build_*_event` (message/reply, reaction, edit, delete, profile, user status, channel, presence…) | build + sign events |
 | `compute_auth_tag` / `verify_auth_tag` / `verify_agent_profile` | NIP-OA owner attestation |
+| `parse_owner_command` / `BuzzClient.verified_owner_hex` / `OWNER_COMMANDS` | owner control commands (`!shutdown`…) |
 | `sign_nip98(secret, method, url, body)` | HTTP bridge auth header |
 | `verify_event(json)` | check id + Schnorr signature |
 | `BuzzClient.send_message / react / remove_reaction / edit_message / set_profile / set_status / resolve_agent / query / list_channels / claim_invite` | HTTP bridge |
