@@ -21,6 +21,7 @@ import contextlib
 import json
 import logging
 import uuid
+import warnings
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -35,6 +36,10 @@ logger = logging.getLogger("buzzkit.client")
 _AUTH_TIMEOUT = 20.0
 _OK_TIMEOUT = 20.0
 _MAX_FRAME = 1 << 20  # 1 MiB — matches the relay's max frame size
+# Relays reject a huddle announcement unless its backing channel carries the
+# relay's huddle TTL: 3600 s, or BUZZ_EPHEMERAL_TTL_OVERRIDE, which replaces
+# whatever the client sends (block/buzz#6056).
+_HUDDLE_TTL = 3600
 
 
 def _checked(r: httpx.Response) -> httpx.Response:
@@ -203,7 +208,7 @@ class BuzzClient:
         return await self.publish(ev)
 
     async def start_huddle(
-        self, parent_channel_id: str, *, name: str | None = None, ttl: int = 3600
+        self, parent_channel_id: str, *, name: str | None = None, ttl: int | None = None
     ) -> str:
         """Start a huddle in a channel; returns the ephemeral huddle channel id.
 
@@ -211,7 +216,19 @@ class BuzzClient:
         :meth:`connect` first) and posts the kind-48100 announcement to the
         parent channel. Join the audio with
         ``HuddleClient(..., huddle_id, parent_channel_id=parent_channel_id)``.
+
+        ``ttl`` is deprecated and ignored: relays only accept a huddle whose
+        backing channel carries their huddle TTL (3600 s, or an operator
+        override that replaces the client's value), so buzzkit always sends
+        3600.
         """
+        if ttl is not None and ttl != _HUDDLE_TTL:
+            warnings.warn(
+                f"start_huddle(ttl={ttl}) is ignored: relays require a {_HUDDLE_TTL} s "
+                "huddle channel; the parameter will be removed",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         huddle_id = str(uuid.uuid4())
         create_ev = _native.build_create_channel_event(
             self._secret,
@@ -219,7 +236,7 @@ class BuzzClient:
             name or f"huddle-{huddle_id[:8]}",
             visibility="private",
             channel_type="stream",
-            ttl=ttl,
+            ttl=_HUDDLE_TTL,
         )
         result = await self.publish(create_ev)
         if not result["accepted"]:
