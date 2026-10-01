@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-10-01
+
+### Security
+
+- `nostr` 0.44.6 → 0.44.7, fixing RUSTSEC-2026-0225 through -0230 — among
+  them resource exhaustion in NIP-98 authorization parsing and in NIP-44 v2
+  decryption, both features buzzkit enables. `chacha20` 0.10.1 (yanked) →
+  0.10.2.
+
+### Changed
+
+- Upstream `buzz-core`/`buzz-sdk` pin moves from `209536ade` (post-v0.5.3) to
+  `5fdb2e536` (post-v0.5.26). Two visible effects:
+  - `build_message_event` keeps a `p` tag mentioning the signer itself
+    (block/buzz#4975); it was silently dropped before.
+  - `verify_auth_tag` rejects uppercase-hex owner keys and signatures, as
+    relays do.
+- `start_huddle(ttl=...)` is deprecated and ignored (`DeprecationWarning` for
+  any value but 3600). Relays now reject a huddle announcement unless its
+  backing channel carries the relay's huddle TTL (block/buzz#6056) — 3600 s,
+  or an operator override that replaces the client's value — so any other
+  `ttl` failed after creating the channel.
+
+### Fixed
+
+- `connect()` raises `RuntimeError` as soon as the relay rejects the NIP-42
+  auth (e.g. `restricted: not a relay member`) or closes the socket before
+  accepting it, and closes the connection. It used to log the rejection and
+  wait out the 20 s timeout. A relay that never answers still raises
+  `TimeoutError`.
+
+### Documented
+
+- Owner commands: the README's check now verifies the event itself
+  (`verify_event`) before trusting its content and author, as upstream
+  `buzz-acp` does for every inbound event (block/buzz#7010).
+- Close code **1008** means the community was deleted: do not reconnect
+  (block/buzz#4425). 1012 still means a graceful restart.
+- The 1 MiB WebSocket frame cap is buzzkit's receive limit; the relay's own
+  inbound limit is 512 KiB by default.
+
 ## [0.3.0] — 2026-08-02
 
 ### Added
