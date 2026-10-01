@@ -84,7 +84,7 @@ class BuzzClient:
         self.close_code: int | None = None
         self._ws: Any = None
         self._reader: asyncio.Task | None = None
-        self._authed = asyncio.Event()
+        self._auth_result: asyncio.Future | None = None
         self._auth_event_id: str | None = None
         self._subs: dict[str, asyncio.Queue] = {}
         self._pending_ok: dict[str, asyncio.Future] = {}
@@ -391,12 +391,31 @@ class BuzzClient:
         await self.close()
 
     async def connect(self) -> None:
-        """Open the WebSocket and complete the NIP-42 auth handshake."""
-        self._authed.clear()
+        """Open the WebSocket and complete the NIP-42 auth handshake.
+
+        Raises ``RuntimeError`` as soon as the relay rejects the AUTH (e.g.
+        ``restricted: not a relay member``) or closes the socket before
+        accepting it, and ``TimeoutError`` when it never answers.
+        """
         self.close_code = None
+        self._auth_result = asyncio.get_running_loop().create_future()
         self._ws = await websockets.connect(self._ws_url, max_size=_MAX_FRAME)
         self._reader = asyncio.create_task(self._read_loop())
-        await asyncio.wait_for(self._authed.wait(), timeout=_AUTH_TIMEOUT)
+        try:
+            await asyncio.wait_for(self._auth_result, timeout=_AUTH_TIMEOUT)
+        except BaseException:
+            await self.close()
+            raise
+
+    def _settle_auth(self, error: str | None) -> None:
+        """Resolve the pending :meth:`connect` (no-op once settled)."""
+        fut = self._auth_result
+        if fut is None or fut.done():
+            return
+        if error is None:
+            fut.set_result(None)
+        else:
+            fut.set_exception(RuntimeError(error))
 
     async def _read_loop(self) -> None:
         try:
@@ -431,6 +450,9 @@ class BuzzClient:
             self.close_code = close.code if close else None
             logger.info("buzz websocket closed (code %s)", self.close_code)
         finally:
+            self._settle_auth(
+                f"connection closed before NIP-42 auth completed (code {self.close_code})"
+            )
             for q in self._subs.values():
                 q.put_nowait(("closed", "connection lost"))
 
@@ -446,10 +468,9 @@ class BuzzClient:
         accepted = bool(msg[2]) if len(msg) > 2 else False
         message = msg[3] if len(msg) > 3 else ""
         if event_id == self._auth_event_id:
-            if accepted:
-                self._authed.set()
-            else:
+            if not accepted:
                 logger.error("NIP-42 auth rejected: %s", message)
+            self._settle_auth(None if accepted else f"NIP-42 auth rejected: {message}")
             return
         fut = self._pending_ok.pop(event_id, None)
         if fut is not None and not fut.done():
