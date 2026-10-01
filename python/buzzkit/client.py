@@ -35,7 +35,9 @@ logger = logging.getLogger("buzzkit.client")
 
 _AUTH_TIMEOUT = 20.0
 _OK_TIMEOUT = 20.0
-_MAX_FRAME = 1 << 20  # 1 MiB — matches the relay's max frame size
+# Inbound cap for frames *from* the relay. The relay's own inbound limit is
+# 512 KiB by default (BUZZ_MAX_FRAME_BYTES); 1 MiB is its HTTP body limit.
+_MAX_FRAME = 1 << 20
 # Relays reject a huddle announcement unless its backing channel carries the
 # relay's huddle TTL: 3600 s, or BUZZ_EPHEMERAL_TTL_OVERRIDE, which replaces
 # whatever the client sends (block/buzz#6056).
@@ -85,7 +87,8 @@ class BuzzClient:
         #: WebSocket close code from the last disconnect (``None`` while
         #: connected or never connected). 1012 means the relay is restarting
         #: (graceful drain): reconnect with backoff and dedupe replayed
-        #: events by id after resubscribing.
+        #: events by id after resubscribing. 1008 means the community was
+        #: deleted: do not reconnect.
         self.close_code: int | None = None
         self._ws: Any = None
         self._reader: asyncio.Task | None = None

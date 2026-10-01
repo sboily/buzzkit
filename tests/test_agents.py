@@ -138,6 +138,34 @@ def test_parse_owner_command_rejects_non_commands():
     assert buzzkit.parse_owner_command(malformed, agent) is None
 
 
+def test_owner_command_check_rejects_forged_events():
+    owner_sk, owner_pk = _keys()
+    agent_sk, agent_pk = _keys()
+    bz = BuzzClient("wss://r", agent_sk, auth_tag=buzzkit.compute_auth_tag(owner_sk, agent_pk))
+    channel = "6b1f4b1e-1b8a-4a3e-9c51-0d7f5f2c9a10"
+
+    def message(secret: str, content: str) -> dict:
+        return json.loads(buzzkit.build_message_event(secret, channel, content, [agent_pk]))
+
+    def is_owner_shutdown(event: dict) -> bool:  # the README's documented check
+        return (
+            buzzkit.parse_owner_command(event, bz.pubkey_hex) == "shutdown"
+            and buzzkit.verify_event(json.dumps(event))
+            and event["pubkey"] == bz.verified_owner_hex
+        )
+
+    assert is_owner_shutdown(message(owner_sk, "!shutdown"))
+    # A relay rewriting an owner's message into a command matches the wire
+    # shape, but no longer verifies.
+    forged = {**message(owner_sk, "hi"), "content": "!shutdown"}
+    assert buzzkit.parse_owner_command(forged, bz.pubkey_hex) == "shutdown"
+    assert not is_owner_shutdown(forged)
+    # Nor does a stranger's command relabelled with the owner's pubkey.
+    stranger_sk, _ = _keys()
+    spoofed = {**message(stranger_sk, "!shutdown"), "pubkey": owner_pk}
+    assert not is_owner_shutdown(spoofed)
+
+
 def test_verified_owner_hex_proves_the_attestation():
     owner_sk, owner_pk = _keys()
     agent_sk, agent_pk = _keys()

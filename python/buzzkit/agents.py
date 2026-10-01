@@ -106,10 +106,12 @@ def parse_owner_command(event: dict[str, Any], agent_pubkey_hex: str) -> str | N
     agent through a ``["p", <agent_pubkey>]`` tag. Returns the bare command
     name (``"shutdown"``, ``"cancel"``, ``"rotate"``) or ``None``.
 
-    Wire matching only — verifying that the event's *author* is the agent's
-    owner is the caller's job (see :attr:`BuzzClient.verified_owner_hex`):
-    upstream treats a non-owner ``!shutdown`` as a regular message, and so
-    must callers.
+    Wire matching only. Before acting, the caller must also check that the
+    event is authentic (:func:`verify_event` on its JSON — upstream verifies
+    every inbound event's id and signature, so a relay cannot forge one) and
+    that its *author* is the agent's owner (see
+    :attr:`BuzzClient.verified_owner_hex`): upstream treats a non-owner
+    ``!shutdown`` as a regular message, and so must callers.
     """
     if event.get("kind") != _native.KIND_STREAM_MESSAGE:
         return None
