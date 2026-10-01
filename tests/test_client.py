@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import uuid
+import warnings
 
 import buzzkit
 import httpx
@@ -89,3 +90,30 @@ async def test_connect_fails_fast_when_closed_before_auth():
         with pytest.raises(RuntimeError, match="closed before NIP-42 auth"):
             await asyncio.wait_for(bz.connect(), 2)
         assert bz.close_code == 1008
+
+
+# ── start_huddle ─────────────────────────────────────────────────────────────
+
+
+async def test_start_huddle_always_sends_the_relay_huddle_ttl(monkeypatch):
+    nsec, _, _ = buzzkit.generate_keypair()
+    bz = BuzzClient("wss://relay.example", nsec)
+    published: list[dict] = []
+
+    async def fake_publish(event_json: str) -> dict:
+        published.append(json.loads(event_json))
+        return {"accepted": True, "event_id": published[-1]["id"], "message": ""}
+
+    monkeypatch.setattr(bz, "publish", fake_publish)
+    parent = str(uuid.uuid4())
+    with pytest.warns(DeprecationWarning, match="ttl=7200"):
+        await bz.start_huddle(parent, ttl=7200)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # the default and an explicit 3600 stay silent
+        await bz.start_huddle(parent)
+        await bz.start_huddle(parent, ttl=3600)
+
+    created = [ev for ev in published if ev["kind"] == buzzkit.KIND_CREATE_CHANNEL]
+    assert len(created) == 3
+    for ev in created:
+        assert ["ttl", "3600"] in ev["tags"]
