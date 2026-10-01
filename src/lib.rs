@@ -91,9 +91,16 @@ fn build_message_event(
             parent_event_id: event_id(parent, "reply_to")?,
         }),
     };
-    let builder =
-        buzz_sdk::build_message(cid, content, thread_ref.as_ref(), &mention_refs, false, &[])
-            .map_err(|e| PyValueError::new_err(format!("build_message: {e}")))?;
+    let builder = buzz_sdk::build_message(
+        cid,
+        content,
+        thread_ref.as_ref(),
+        &mention_refs,
+        false,
+        &[],
+        &[],
+    )
+    .map_err(|e| PyValueError::new_err(format!("build_message: {e}")))?;
     sign(builder, &keys)
 }
 

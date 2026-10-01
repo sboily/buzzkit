@@ -145,6 +145,13 @@ def test_join_channel_event_keeps_self_p_tag():
     assert any(t[0] == "h" for t in event["tags"])
 
 
+def test_message_event_keeps_self_mention():
+    nsec, _, pk_hex = buzzkit.generate_keypair()
+    event = json.loads(buzzkit.build_message_event(nsec, str(uuid.uuid4()), "note", [pk_hex]))
+    # Self-mentions survive nostr's self-tag stripping (upstream block/buzz#4975).
+    assert ["p", pk_hex] in event["tags"]
+
+
 def test_compute_auth_tag():
     owner_nsec, _, owner_pk = buzzkit.generate_keypair()
     _, _, agent_pk = buzzkit.generate_keypair()
@@ -220,6 +227,18 @@ def test_verify_auth_tag_roundtrip():
         buzzkit.verify_auth_tag(tag, other_pk)
     with pytest.raises(ValueError):
         buzzkit.verify_auth_tag("not json", agent_pk)
+
+
+def test_verify_auth_tag_rejects_noncanonical_hex():
+    owner_nsec, _, _ = buzzkit.generate_keypair()
+    _, _, agent_pk = buzzkit.generate_keypair()
+    tag = json.loads(buzzkit.compute_auth_tag(owner_nsec, agent_pk))
+    # Relays reject uppercase hex; verification must not accept what they refuse.
+    for i in (1, 3):
+        upper = list(tag)
+        upper[i] = upper[i].upper()
+        with pytest.raises(ValueError):
+            buzzkit.verify_auth_tag(json.dumps(upper), agent_pk)
 
 
 def test_huddle_started_event():
